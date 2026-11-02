@@ -1,0 +1,167 @@
+name: Android build
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+# contents: write is used only for two optional releases (the encrypted signing key and "latest-build").
+permissions:
+  contents: write
+
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The repo has no Gradle wrapper (its binary jar cannot be created from a phone),
+  # so CI installs this exact, pinned Gradle version instead.
+  GRADLE_VERSION: "8.14.3"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform 36
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" || echo "::warning::sdkmanager install failed; Gradle will try to download the platform itself."
+
+      - name: Set up pinned Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+
+      # Optional. Without it APKs are signed with a throw-away CI debug key, so each new build
+      # must be installed after uninstalling the previous one. See README "Stable signing".
+      - name: Prepare stable signing key (optional)
+        id: signing
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXUS_KEYSTORE_PASSWORD: ${{ secrets.NEXUS_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$NEXUS_KEYSTORE_PASSWORD" ]; then
+            echo "::warning::Secret NEXUS_KEYSTORE_PASSWORD is not set. Using the temporary CI debug key (updates need an uninstall first)."
+            exit 0
+          fi
+          KS="$RUNNER_TEMP/nexus-signing.p12"
+          if gh release download signing-key --repo "$GITHUB_REPOSITORY" --pattern nexus-signing.p12 --dir "$RUNNER_TEMP" --clobber; then
+            echo "Re-using the existing signing key from the private 'signing-key' release."
+          else
+            echo "Creating a new signing key."
+            keytool -genkeypair -storetype PKCS12 -keystore "$KS" -alias nexus -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$NEXUS_KEYSTORE_PASSWORD" -keypass "$NEXUS_KEYSTORE_PASSWORD" \
+              -dname "CN=NEXUS Personal Intelligence, O=NEXUS"
+            gh release create signing-key "$KS" --repo "$GITHUB_REPOSITORY" --prerelease \
+              --title "NEXUS signing key (encrypted, keep private)" \
+              --notes "Password-protected keystore used to sign NEXUS debug builds. The password lives only in the NEXUS_KEYSTORE_PASSWORD secret."
+          fi
+          echo "NEXUS_KEYSTORE_FILE=$KS" >> "$GITHUB_ENV"
+          echo "NEXUS_KEYSTORE_PASSWORD=$NEXUS_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Unit tests
+        shell: bash
+        run: |
+          mkdir -p ci-logs
+          gradle --stacktrace testDebugUnitTest 2>&1 | tee ci-logs/unit-tests.log
+
+      - name: Build debug APKs
+        shell: bash
+        run: |
+          gradle --stacktrace :app-tv:assembleDebug :app-mobile:assembleDebug 2>&1 | tee ci-logs/build.log
+
+      - name: Collect APKs and write summary
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp app-tv/build/outputs/apk/debug/app-tv-debug.apk dist/
+          cp app-mobile/build/outputs/apk/debug/app-mobile-debug.apk dist/
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, xml.etree.ElementTree as ET
+          total = failed = skipped = 0
+          for f in glob.glob("**/build/test-results/testDebugUnitTest/*.xml", recursive=True):
+              r = ET.parse(f).getroot()
+              total += int(r.get("tests", 0)); failed += int(r.get("failures", 0)) + int(r.get("errors", 0)); skipped += int(r.get("skipped", 0))
+          print("## NEXUS build result")
+          print(f"- Unit tests run: **{total}**, failed: **{failed}**, skipped: **{skipped}**")
+          print("- These are JVM unit tests only. Nothing here was run on a phone or on the Motorola TV.")
+          PY
+          if [ -n "$NEXUS_KEYSTORE_FILE" ]; then
+            echo "- Signing: stable NEXUS key (updates install over the previous build)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Signing: temporary CI debug key (uninstall the old build before installing a new one)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          ls -l dist >> ci-logs/apk-list.txt
+
+      - name: Inspect APKs (package, features, signer)
+        continue-on-error: true
+        shell: bash
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          {
+            for apk in dist/*.apk; do
+              echo "### $(basename "$apk")"
+              echo '```'
+              echo "size: $(stat -c %s "$apk") bytes"
+              "$BT/aapt2" dump badging "$apk" 2>/dev/null | grep -E "^package:|^sdkVersion|^targetSdkVersion|leanback|launchable-activity" || true
+              "$BT/aapt2" dump permissions "$apk" 2>/dev/null | head -5 || true
+              "$BT/apksigner" verify --print-certs "$apk" 2>&1 | grep -E "certificate (DN|SHA-256)" || true
+              echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload TV APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-tv-debug-apk
+          path: dist/app-tv-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload mobile APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-mobile-debug-apk
+          path: dist/app-mobile-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload logs and test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-and-test-reports
+          path: |
+            ci-logs/
+            **/build/reports/tests/
+            **/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Convenience: plain .apk files (no zip to unpack) on a private "latest-build" release page.
+      - name: Publish APKs to the latest-build release (optional)
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest-build --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create latest-build dist/app-tv-debug.apk dist/app-mobile-debug.apk \
+            --repo "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" \
+            --title "Latest NEXUS debug build" \
+            --notes "Built from commit $GITHUB_SHA. Debug APKs, not for distribution."
