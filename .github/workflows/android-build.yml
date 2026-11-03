@@ -51,6 +51,7 @@ jobs:
       # must be installed after uninstalling the previous one. See README "Stable signing".
       - name: Prepare stable signing key (optional)
         id: signing
+        if: github.ref == 'refs/heads/main'
         continue-on-error: true
         shell: bash
         env:
@@ -157,6 +158,7 @@ jobs:
 
       # Convenience: plain .apk files (no zip to unpack) on a private "latest-build" release page.
       - name: Publish APKs to the latest-build release (optional)
+        if: github.ref == 'refs/heads/main'
         continue-on-error: true
         shell: bash
         env:
