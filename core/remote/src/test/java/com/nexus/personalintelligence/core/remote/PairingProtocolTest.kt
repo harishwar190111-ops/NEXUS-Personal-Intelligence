@@ -102,9 +102,93 @@ class PairingProtocolTest {
         val pairResp = c.requestPairing("phone-123", "Samsung Galaxy F54")
         assertEquals(PairingStatus.PENDING_APPROVAL, pairResp.status)
 
-        val verifyResp = c.verifyPairing("phone-123", "000000_WRONG_PIN")
+        val verifyResp = c.verifyPairing("phone-123", "999999")
         assertEquals(PairingStatus.INVALID_PIN, verifyResp.status)
         assertEquals(ConnectionState.NOT_PAIRED, c.connectionState.value)
+    }
+
+    @Test
+    fun testMaxAttemptsExceededOnInvalidPin() = runBlocking {
+        val s = server ?: throw IllegalStateException("Server not initialized")
+        val c = client ?: throw IllegalStateException("Client not initialized")
+
+        s.securityGateCallback = { _, _, _, onApprove, _ ->
+            onApprove()
+        }
+
+        c.connect("127.0.0.1", s.actualPort)
+        c.requestPairing("phone-attempts", "Samsung Galaxy F54")
+
+        // 1st attempt: invalid PIN
+        val resp1 = c.verifyPairing("phone-attempts", "111111")
+        assertEquals(PairingStatus.INVALID_PIN, resp1.status)
+        assertTrue(resp1.message.contains("Attempt 1 of 3"))
+
+        // 2nd attempt: invalid PIN
+        val resp2 = c.verifyPairing("phone-attempts", "222222")
+        assertEquals(PairingStatus.INVALID_PIN, resp2.status)
+        assertTrue(resp2.message.contains("Attempt 2 of 3"))
+
+        // 3rd attempt: invalid PIN -> max attempts exceeded, removed from pending
+        val resp3 = c.verifyPairing("phone-attempts", "333333")
+        assertEquals(PairingStatus.INVALID_PIN, resp3.status)
+        assertTrue(resp3.message.contains("Maximum PIN attempts exceeded"))
+        assertNull(s.getPendingPairing("phone-attempts"))
+
+        // 4th attempt: pairing request no longer exists
+        val resp4 = c.verifyPairing("phone-attempts", "444444")
+        assertEquals(PairingStatus.REJECTED, resp4.status)
+    }
+
+    @Test
+    fun testPairingPinExpiry() = runBlocking {
+        val s = server ?: throw IllegalStateException("Server not initialized")
+        val c = client ?: throw IllegalStateException("Client not initialized")
+
+        val capturedPin = AtomicReference<String>()
+        s.securityGateCallback = { _, _, pin, onApprove, _ ->
+            capturedPin.set(pin)
+            onApprove()
+        }
+
+        c.connect("127.0.0.1", s.actualPort)
+        c.requestPairing("phone-expire", "Samsung Galaxy F54")
+
+        val pending = s.getPendingPairing("phone-expire")
+        assertNotNull(pending)
+        // Simulate expired timestamp
+        pending?.createdAt = System.currentTimeMillis() - 70000L // 70s ago > 60s expiry
+
+        val verifyResp = c.verifyPairing("phone-expire", capturedPin.get())
+        assertEquals(PairingStatus.EXPIRED, verifyResp.status)
+        assertNull("Expired pairing must be cleaned up", s.getPendingPairing("phone-expire"))
+        assertFalse(s.isDevicePaired("phone-expire"))
+    }
+
+    @Test
+    fun testPinIsSixDigitsWithoutLeadingZero() = runBlocking {
+        val s = server ?: throw IllegalStateException("Server not initialized")
+        val c = client ?: throw IllegalStateException("Client not initialized")
+
+        val pins = mutableListOf<String>()
+        s.securityGateCallback = { _, _, pin, onApprove, _ ->
+            pins.add(pin)
+            onApprove()
+        }
+
+        c.connect("127.0.0.1", s.actualPort)
+
+        for (i in 1..5) {
+            val devId = "phone-dev-$i"
+            c.requestPairing(devId, "Device $i")
+            val pin = s.getPendingPin(devId)
+            assertNotNull(pin)
+            assertEquals("PIN must be exactly 6 digits", 6, pin!!.length)
+            assertTrue("PIN must be numeric digits only", pin.all { it.isDigit() })
+            val numericPin = pin.toInt()
+            assertTrue("PIN must be between 100000 and 999999 (no leading zero)", numericPin in 100000..999999)
+            assertNotEquals("PIN should never start with 0", '0', pin[0])
+        }
     }
 
     @Test

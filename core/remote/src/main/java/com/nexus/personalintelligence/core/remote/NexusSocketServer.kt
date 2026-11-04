@@ -34,8 +34,12 @@ class NexusSocketServer(
         val clientDeviceName: String,
         val clientIp: String,
         val pin: String,
-        val createdAt: Long = System.currentTimeMillis(),
-        val approveDeferred: CompletableDeferred<Boolean>
+        var createdAt: Long = System.currentTimeMillis(),
+        val approveDeferred: CompletableDeferred<Boolean>,
+        var isApproved: Boolean = false,
+        var attempts: Int = 0,
+        val maxAttempts: Int = 3,
+        var expiryMs: Long = 60000L
     )
 
     private val pendingPairings = ConcurrentHashMap<String, PendingPairing>()
@@ -95,8 +99,8 @@ class NexusSocketServer(
                     }
                     MessageType.PAIR_REQUEST -> {
                         val req = json.decodeFromString<PairingRequest>(packet.payload)
-                        // Generate cryptographically secure 6-digit PIN
-                        val pin = String.format("%06d", secureRandom.nextInt(1000000))
+                        // Generate cryptographically secure strictly 6-digit PIN (100000..999999) with no leading zero mismatch
+                        val pin = (100000 + secureRandom.nextInt(900000)).toString()
                         val approveDeferred = CompletableDeferred<Boolean>()
 
                         val pending = PendingPairing(
@@ -108,7 +112,7 @@ class NexusSocketServer(
                         )
                         pendingPairings[req.clientDeviceId] = pending
 
-                        // Notify security gate callback
+                        // Notify security gate callback on TV
                         securityGateCallback?.invoke(
                             req.clientDeviceName,
                             clientIp,
@@ -125,9 +129,10 @@ class NexusSocketServer(
                         }
 
                         if (approved) {
+                            pending.isApproved = true
                             val pairResp = PairingResponse(
                                 status = PairingStatus.PENDING_APPROVAL,
-                                pin = pin,
+                                pin = "", // PIN is kept secret on network; displayed on TV screen
                                 tvDeviceName = tvDeviceName,
                                 message = "Enter the 6-digit PIN on the TV screen"
                             )
@@ -147,36 +152,76 @@ class NexusSocketServer(
                     MessageType.PAIR_VERIFY -> {
                         val verify = json.decodeFromString<PairingVerification>(packet.payload)
                         val pending = pendingPairings[verify.clientDeviceId]
-                        if (pending != null && pending.pin == verify.pin) {
-                            val token = UUID.randomUUID().toString()
-                            val device = PairedDevice(
-                                deviceId = verify.clientDeviceId,
-                                deviceName = pending.clientDeviceName,
-                                sessionToken = token,
-                                pairedAt = System.currentTimeMillis(),
-                                lastSeenAt = System.currentTimeMillis()
-                            )
-                            pairedDevices[verify.clientDeviceId] = device
-                            pendingPairings.remove(verify.clientDeviceId)
-                            currentSessionToken = token
-                            currentDeviceId = verify.clientDeviceId
 
+                        if (pending == null) {
                             val pairResp = PairingResponse(
-                                status = PairingStatus.APPROVED,
-                                sessionToken = token,
+                                status = PairingStatus.REJECTED,
                                 tvDeviceName = tvDeviceName,
-                                message = "Pairing successful and authenticated"
+                                message = "No active pairing request found"
+                            )
+                            val resp = NetworkPacket(type = MessageType.PAIR_RESPONSE, id = packet.id, payload = json.encodeToString(pairResp))
+                            writer.println(json.encodeToString(resp))
+                        } else if (!pending.isApproved) {
+                            val pairResp = PairingResponse(
+                                status = PairingStatus.REJECTED,
+                                tvDeviceName = tvDeviceName,
+                                message = "Pairing has not been approved on TV"
+                            )
+                            val resp = NetworkPacket(type = MessageType.PAIR_RESPONSE, id = packet.id, payload = json.encodeToString(pairResp))
+                            writer.println(json.encodeToString(resp))
+                        } else if (System.currentTimeMillis() - pending.createdAt > pending.expiryMs) {
+                            pendingPairings.remove(verify.clientDeviceId)
+                            val pairResp = PairingResponse(
+                                status = PairingStatus.EXPIRED,
+                                tvDeviceName = tvDeviceName,
+                                message = "Pairing PIN has expired"
                             )
                             val resp = NetworkPacket(type = MessageType.PAIR_RESPONSE, id = packet.id, payload = json.encodeToString(pairResp))
                             writer.println(json.encodeToString(resp))
                         } else {
-                            val pairResp = PairingResponse(
-                                status = PairingStatus.INVALID_PIN,
-                                tvDeviceName = tvDeviceName,
-                                message = "Invalid pairing PIN"
-                            )
-                            val resp = NetworkPacket(type = MessageType.PAIR_RESPONSE, id = packet.id, payload = json.encodeToString(pairResp))
-                            writer.println(json.encodeToString(resp))
+                            pending.attempts++
+                            if (pending.pin == verify.pin) {
+                                val token = UUID.randomUUID().toString()
+                                val device = PairedDevice(
+                                    deviceId = verify.clientDeviceId,
+                                    deviceName = pending.clientDeviceName,
+                                    sessionToken = token,
+                                    pairedAt = System.currentTimeMillis(),
+                                    lastSeenAt = System.currentTimeMillis()
+                                )
+                                pairedDevices[verify.clientDeviceId] = device
+                                pendingPairings.remove(verify.clientDeviceId)
+                                currentSessionToken = token
+                                currentDeviceId = verify.clientDeviceId
+
+                                val pairResp = PairingResponse(
+                                    status = PairingStatus.APPROVED,
+                                    sessionToken = token,
+                                    tvDeviceName = tvDeviceName,
+                                    message = "Pairing successful and authenticated"
+                                )
+                                val resp = NetworkPacket(type = MessageType.PAIR_RESPONSE, id = packet.id, payload = json.encodeToString(pairResp))
+                                writer.println(json.encodeToString(resp))
+                            } else {
+                                if (pending.attempts >= pending.maxAttempts) {
+                                    pendingPairings.remove(verify.clientDeviceId)
+                                    val pairResp = PairingResponse(
+                                        status = PairingStatus.INVALID_PIN,
+                                        tvDeviceName = tvDeviceName,
+                                        message = "Maximum PIN attempts exceeded. Pairing rejected."
+                                    )
+                                    val resp = NetworkPacket(type = MessageType.PAIR_RESPONSE, id = packet.id, payload = json.encodeToString(pairResp))
+                                    writer.println(json.encodeToString(resp))
+                                } else {
+                                    val pairResp = PairingResponse(
+                                        status = PairingStatus.INVALID_PIN,
+                                        tvDeviceName = tvDeviceName,
+                                        message = "Invalid pairing PIN. Attempt ${pending.attempts} of ${pending.maxAttempts}"
+                                    )
+                                    val resp = NetworkPacket(type = MessageType.PAIR_RESPONSE, id = packet.id, payload = json.encodeToString(pairResp))
+                                    writer.println(json.encodeToString(resp))
+                                }
+                            }
                         }
                     }
                     MessageType.HANDSHAKE -> {
@@ -256,6 +301,8 @@ class NexusSocketServer(
     }
 
     fun getPendingPin(deviceId: String): String? = pendingPairings[deviceId]?.pin
+
+    fun getPendingPairing(deviceId: String): PendingPairing? = pendingPairings[deviceId]
 
     fun getPairedDevice(deviceId: String): PairedDevice? = pairedDevices[deviceId]
 

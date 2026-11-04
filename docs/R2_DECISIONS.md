@@ -28,10 +28,15 @@ Earlier Release 2 coexistence guidelines required that test builds coexist with 
 ## 2. Pairing Codes and Security Review Gate
 
 ### Conflict
-Pairing mechanisms must remain user-friendly on TV screens with a D-pad remote while preventing unauthorized devices on the local network from hijacking TV control. Some proposals suggested short 4-digit codes or silent approval for repeated connections.
+Pairing mechanisms must remain user-friendly on TV screens with a D-pad remote while preventing unauthorized devices on the local network from hijacking TV control. Some proposals suggested short 4-digit codes or silent approval for repeated connections. Furthermore, the master specification (`nexus-user-master-spec.txt`) mandates "Pairing PIN or approval", "Invalid PIN", and "no re-entering the PIN on every reopen", but does not specify the exact digit length, attempt limits, or format for the pairing PIN.
 
-### Resolution
-- **6-Digit Secure PIN**: Pairing codes remain strictly 6 numeric digits (e.g., `100000`–`999999`) generated using `java.security.SecureRandom`.
+### AGY Decision: 6-Digit Secure PIN Length and Range
+- **6-Digit Secure PIN**: Pairing codes are strictly 6 numeric digits generated in the range `100000`–`999999` using `(100000 + secureRandom.nextInt(900000)).toString()`.
+  - **No Leading-Zero Mismatch**: Starting strictly at `100000` ensures every PIN has exactly 6 digits without leading zeros, eliminating any mismatch or parsing ambiguity between string and integer representations across phone and TV.
+  - **Security Entropy**: 900,000 combinations provides strong protection against local network brute forcing while remaining quick and intuitive to input on a TV screen via remote or phone keypad.
+  - **Attempt Limits and Expiry**: Pending pairings expire after 60 seconds. A maximum of 3 failed PIN verification attempts is enforced; on the 3rd failed attempt, the pending pairing is revoked and purged immediately.
+
+### Resolution & Protocol
 - **Security Review Gate**:
   - The TV will never automatically approve a new pairing request.
   - When a phone initiates pairing, the TV displays a modal Security Review Gate dialog showing:
@@ -40,7 +45,7 @@ Pairing mechanisms must remain user-friendly on TV screens with a D-pad remote w
     - The 6-digit verification code
   - The user must explicitly approve the pairing request using the TV remote control (D-pad + OK/Select).
 - **Session Tokens**:
-  - Upon user approval, the TV issues a cryptographically secure session token with an expiry window (default 7 days).
+  - Upon user approval and successful PIN verification, the TV issues a cryptographically secure session token with an expiry window (default 7 days).
   - The TV persists the approved device identity and token in its local paired devices registry.
   - The phone stores the session token in secure storage (encrypted with Android Keystore) and uses it for authenticated reconnection without re-entering the PIN.
   - The user can revoke any paired device at any time from TV Settings or Mobile Settings.
