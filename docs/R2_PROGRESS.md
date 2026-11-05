@@ -4,13 +4,14 @@
 
 - **Audit Date**: 2026-11-05
 - **Branch**: `feature/nexus-release2-implementation`
-- **HEAD Commit**: uncommitted work after ff0507c
+- **HEAD Commit**: uncommitted work after 2d2f553
 - **Passing Test Counts from Fresh XML**:
+  - `core:common`: 18 tests, 0 failures
   - `core:ai`: 6 tests, 0 failures
   - `core:remote`: 19 tests, 0 failures
   - `app-tv`: 18 tests, 0 failures
   - `app-mobile`: 15 tests, 0 failures
-  - **Subtotal**: 58 passed, 0 failures across active R2 target modules.
+  - **Subtotal**: 76 passed, 0 failures across active R2 target modules.
 
 ---
 
@@ -54,12 +55,12 @@
 | **34** | DEVICE DASHBOARD (HARDWARE METRICS) | **done untested** | `DeviceInfo.kt` on TV and mobile dashboard tiles. | Live network ping/latency measurement. |
 | **35** | DIAGNOSTICS AND COMMAND HISTORY | **done and tested** | `DiagnosticsReportTest.testCommandHistoryBoundedCapacity`, `DiagnosticsReportTest.testSecretRedactionFromDiagnosticExport`. | UI diagnostic export button in Settings. |
 | **36** | ACCESSIBILITY | **done untested** | High-contrast borders, focus indicators in `TvComponents.kt`. | Reduced-motion runtime toggle in Settings. |
-| **37** | BACKUP AND RESTORE | **partial** | `NexusSettingsRepositoryTest.testSettingsAndBackupRestore`. | User-facing JSON file export/import picker in UI. |
+| **37** | BACKUP AND RESTORE | **done and tested** | `NexusBackupManagerTest.testExportExcludesApiKeysAndTokens`, `NexusBackupManagerTest.testExportAndRestoreRoundTrip`, `NexusBackupManagerTest.testRestoreRejectsMalformedJson`, `NexusBackupManagerTest.testWallpaperReferenceSafety`. | User-facing file picker on Android UI to save/load backup JSON to external storage. |
 | **38** | MULTI-DEVICE SESSION MANAGEMENT | **done and tested** | `PairingProtocolTest.testRevokedDeviceAuthenticationAndCommandRejection`. | Multi-phone concurrent active session list in TV Settings. |
 | **39** | NOTIFICATION AND EVENT CENTRE | **done and tested** | `NexusEventStoreTest.testAddEventAndListNewestFirst`, `NexusEventStoreTest.testBoundedCapacityEviction`, `NexusEventStoreTest.testMarkAsReadAndUnreadCount`, `NexusEventStoreTest.testClearAll`. | Visual notification drawer UI. |
 | **40** | SOUND AND FEEDBACK SYSTEM | **done untested** | `TvAudioEngine.kt` in `app-tv`. | Sound assets bundled and wired to keypress events. |
 | **41** | CONNECTION RECOVERY | **done and tested** | `PairingProtocolTest.testReconnectionFlow`, `MobileRemoteManagerTest.testReconnectionUsingSavedCredentials`. | Exponential backoff retry loop on background resume. |
-| **42** | USER PROFILES | **not started** | None. | User profile switcher. |
+| **42** | USER PROFILES | **done and tested** | `UserProfileTest.testDefaultProfileCannotBeDeleted`, `UserProfileTest.testAddAndSwitchProfilesWithSettingsIsolation`, `UserProfileTest.testBoundedProfileCountEnforced`, `UserProfileTest.testDeleteNonDefaultProfileAndFallbackToDefault`, `UserProfileTest.testRejectBlankProfileName`. | TV settings profile switching carousel UI (QuickSettings shows active profile name). |
 | **43** | APP COMPATIBILITY INFORMATION | **done and tested** | `RemoteModelsTest.testAppCapabilityRegistry`. | Additional third-party streaming apps in registry matrix. |
 | **44** | FEATURE MANAGER | **done untested** | MoreScreen.kt static list. | Dynamic status inspector matching this audit file. |
 | **45** | EXTENSIBLE ARCHITECTURE | **done untested** | Clean module boundaries defined in Gradle: `:core:common`, `:core:remote`, `:core:ai`, `:core:voice`, `:core:memory`, `:core:storage`, `:core:design`, `:app-tv`, `:app-mobile`. | No dedicated automated test class for architectural boundaries. |
@@ -67,7 +68,7 @@
 | **47** | LOW-MEMORY OPTIMISATION | **done untested** | Lean socket server, no local LLM on TV, memory cache bounds. | Actual physical heap measurement on 2 GB Motorola stick under load. |
 | **48** | FAILURE HANDLING | **done and tested** | `PairingProtocolTest.testRejectedPairingAtSecurityGate`, `MobileRemoteManagerTest.testInvalidPinRejection`. | Failure recovery UI on physical network loss. |
 | **49** | ANDROID APP STRUCTURE | **done untested** | TV Leanback manifest, Mobile launcher manifest, exported activities configured. | Android CTS / lint structure verification. |
-| **50** | AUTOMATED TESTING | **partial** | 58 passing unit tests across core:ai (6), core:remote (19), app-tv (18), app-mobile (15), 0 failures. | Instrumented UI and integration tests on target hardware. |
+| **50** | AUTOMATED TESTING | **partial** | 76 passing unit tests across core:common (18), core:ai (6), core:remote (19), app-tv (18), app-mobile (15), 0 failures. | Instrumented UI and integration tests on target hardware. |
 | **51** | BUILD AND APK DELIVERY | **done and tested** | `:app-tv:assembleDebug` and `:app-mobile:assembleDebug` completed successfully. Built outputs: `app-tv/build/outputs/apk/debug/app-tv-debug.apk` (11M), `app-mobile/build/outputs/apk/debug/app-mobile-debug.apk` (11M). | Physical sideloading on target hardware. |
 | **52** | PHYSICAL DEVICE VERIFICATION | **not started** | Verification instructions documented in spec. | Physical testing on Samsung Galaxy F54 and Motorola TV Stick. |
 
