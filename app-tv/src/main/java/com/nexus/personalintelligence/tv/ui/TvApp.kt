@@ -45,8 +45,16 @@ fun NexusTvApp(vm: TvViewModel, startedAsHome: Boolean) {
     val pairedDevices by vm.pairedDevices.collectAsStateWithLifecycle()
     val isScreensaverActive by vm.isScreensaverActive.collectAsStateWithLifecycle()
     val isQuickSettingsOpen by vm.isQuickSettingsOpen.collectAsStateWithLifecycle()
+    val homeTrigger by vm.homeNavigationTrigger.collectAsStateWithLifecycle()
     var screen by remember { mutableStateOf(TvScreen.Home) }
     var entry by remember { mutableStateOf<EntryRequest?>(null) }
+
+    LaunchedEffect(homeTrigger) {
+        if (homeTrigger > 0) {
+            screen = TvScreen.Home
+            entry = null
+        }
+    }
 
     val p = prefs
     val a = apps

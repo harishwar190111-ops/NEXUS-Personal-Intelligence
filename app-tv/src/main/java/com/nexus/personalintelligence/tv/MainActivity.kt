@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import com.nexus.personalintelligence.tv.data.TvLauncherLogic
 import com.nexus.personalintelligence.tv.ui.NexusTvApp
 
 class MainActivity : ComponentActivity() {
@@ -12,7 +13,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { NexusTvApp(viewModel, startedAsHome = intent?.hasCategory(Intent.CATEGORY_HOME) == true) }
+        val isHome = intent?.let { TvLauncherLogic.isHomeIntent(it.action, it.categories) } == true ||
+                intent?.hasCategory(Intent.CATEGORY_HOME) == true
+        setContent { NexusTvApp(viewModel, startedAsHome = isHome) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (TvLauncherLogic.isHomeIntent(intent.action, intent.categories) ||
+            intent.hasCategory(Intent.CATEGORY_HOME)) {
+            viewModel.navigateToHome()
+        }
     }
 
     override fun onResume() {

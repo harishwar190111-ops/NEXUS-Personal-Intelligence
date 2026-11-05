@@ -193,3 +193,114 @@ class NexusAiEngine(
         }
     }
 }
+
+@Serializable
+data class TvSpeechResponse(
+    val spokenText: String,
+    val uiFeedbackMessage: String,
+    val commandToExecute: RemoteCommand? = null,
+    val requiresMicrophoneFallbackHelp: Boolean = false
+)
+
+class TvAssistantDialogueEngine(
+    private val intentParser: NexusAiIntentParser = NexusAiIntentParser()
+) {
+    fun processVoiceQuery(
+        query: String,
+        hasCompatibleTvMic: Boolean,
+        availableStorageBytes: Long = -1L
+    ): TvSpeechResponse {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) {
+            return if (!hasCompatibleTvMic) {
+                TvSpeechResponse(
+                    spokenText = "TV microphone is not available. Please use your phone as a remote microphone.",
+                    uiFeedbackMessage = "Direct TV microphone unavailable. Tap voice button on your phone to speak.",
+                    requiresMicrophoneFallbackHelp = true
+                )
+            } else {
+                TvSpeechResponse(
+                    spokenText = "I didn't catch that. Please speak again.",
+                    uiFeedbackMessage = "Listening..."
+                )
+            }
+        }
+
+        val lower = trimmed.lowercase()
+
+        // 1. Storage query
+        if (lower.contains("storage") || lower.contains("space") || lower.contains("மெமரி") || lower.contains("சேமிப்பக")) {
+            val storageText = if (availableStorageBytes >= 0L) {
+                val gb = availableStorageBytes / (1024.0 * 1024.0 * 1024.0)
+                String.format(java.util.Locale.US, "%.1f gigabytes available", gb)
+            } else {
+                "Storage information is currently inaccessible"
+            }
+            return TvSpeechResponse(
+                spokenText = "You have $storageText on your TV.",
+                uiFeedbackMessage = "Storage: $storageText"
+            )
+        }
+
+        // 2. Applications query
+        if (lower.contains("show my application") || lower.contains("show applications") || lower.contains("apps")) {
+            return TvSpeechResponse(
+                spokenText = "Showing your installed TV applications.",
+                uiFeedbackMessage = "Opening Applications Library",
+                commandToExecute = RemoteCommand(type = RemoteCommandType.MENU)
+            )
+        }
+
+        // 3. Settings query
+        if (lower.contains("open settings") || lower.contains("settings") || lower.contains("செட்டிங்")) {
+            return TvSpeechResponse(
+                spokenText = "Opening settings.",
+                uiFeedbackMessage = "Opening Settings",
+                commandToExecute = RemoteCommand(type = RemoteCommandType.SETTINGS)
+            )
+        }
+
+        // 4. Return home query
+        if (lower.contains("return home") || lower.contains("go home") || lower.contains("முகப்பு")) {
+            return TvSpeechResponse(
+                spokenText = "Returning to home screen.",
+                uiFeedbackMessage = "Returning Home",
+                commandToExecute = RemoteCommand(type = RemoteCommandType.HOME)
+            )
+        }
+
+        // 5. Change wallpaper
+        if (lower.contains("change wallpaper") || lower.contains("wallpaper") || lower.contains("வால்பேப்பர்")) {
+            return TvSpeechResponse(
+                spokenText = "Opening wallpaper settings.",
+                uiFeedbackMessage = "Opening Wallpaper Settings",
+                commandToExecute = RemoteCommand(type = RemoteCommandType.SETTINGS)
+            )
+        }
+
+        // 6. Change theme
+        if (lower.contains("change theme") || lower.contains("theme") || lower.contains("தீம்")) {
+            return TvSpeechResponse(
+                spokenText = "Opening theme configuration.",
+                uiFeedbackMessage = "Opening Theme Settings",
+                commandToExecute = RemoteCommand(type = RemoteCommandType.SETTINGS)
+            )
+        }
+
+        // 7. General intent parse
+        val intent = intentParser.parse(trimmed)
+        val cmd = intentParser.toRemoteCommand(intent)
+        return if (cmd != null) {
+            TvSpeechResponse(
+                spokenText = "Executing command: ${intent.action}",
+                uiFeedbackMessage = "Command: ${intent.action} (${intent.target})",
+                commandToExecute = cmd
+            )
+        } else {
+            TvSpeechResponse(
+                spokenText = "Command recognized, but no matching TV action could be resolved.",
+                uiFeedbackMessage = "Unresolved command: $query"
+            )
+        }
+    }
+}

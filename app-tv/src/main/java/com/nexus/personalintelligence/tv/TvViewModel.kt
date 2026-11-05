@@ -20,6 +20,8 @@ import com.nexus.personalintelligence.core.remote.events.EventCategory
 import com.nexus.personalintelligence.core.remote.events.EventSeverity
 import com.nexus.personalintelligence.core.remote.events.NexusEvent
 import com.nexus.personalintelligence.core.remote.events.NexusEventStore
+import com.nexus.personalintelligence.tv.audio.TvAudioEngine
+import com.nexus.personalintelligence.tv.audio.TvSoundEffect
 import com.nexus.personalintelligence.tv.network.SecurityGateRequest
 import com.nexus.personalintelligence.tv.network.TvCommandDispatcher
 import com.nexus.personalintelligence.tv.network.TvNetworkManager
@@ -37,6 +39,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -47,6 +50,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val historyTracker = CommandHistoryTracker()
     val profileStore = UserProfileStore(defaultProfileName = "Main Living Room")
     val backupManager = NexusBackupManager()
+    val audioEngine = TvAudioEngine()
     val networkManager = TvNetworkManager()
     val screensaverManager = TvScreensaverManager()
     private val commandDispatcher = TvCommandDispatcher(
@@ -55,6 +59,15 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         historyTracker = historyTracker,
         eventStore = eventStore
     )
+
+    private val _homeNavigationTrigger = MutableStateFlow(0)
+    val homeNavigationTrigger: StateFlow<Int> = _homeNavigationTrigger.asStateFlow()
+
+    fun navigateToHome() {
+        _homeNavigationTrigger.value += 1
+        screensaverManager.recordActivity()
+        audioEngine.playSound(TvSoundEffect.DASHBOARD_APPEAR)
+    }
 
     val securityGateRequest: StateFlow<SecurityGateRequest?> = networkManager.securityGateRequest
     val pairedDevices: StateFlow<List<PairedDevice>> = networkManager.pairedDevices

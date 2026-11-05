@@ -7,11 +7,12 @@
 - **HEAD Commit**: uncommitted work after 06b88b2
 - **Passing Test Counts from Fresh XML**:
   - `core:common`: 23 tests, 0 failures
-  - `core:ai`: 6 tests, 0 failures
+  - `core:ai`: 10 tests, 0 failures
   - `core:remote`: 24 tests, 0 failures
-  - `app-tv`: 18 tests, 0 failures
+  - `core:automation`: 6 tests, 0 failures
+  - `app-tv`: 26 tests, 0 failures
   - `app-mobile`: 15 tests, 0 failures
-  - **Subtotal**: 86 passed, 0 failures across active R2 target modules.
+  - **Subtotal**: 104 passed, 0 failures across active R2 target modules.
 
 ---
 
@@ -24,11 +25,11 @@
 | **3** | REPOSITORY AUDIT AND RELEASE MANAGEMENT | **done untested** | Audit files `docs/R2_AUDIT.md`, `docs/R2_DECISIONS.md`, and `docs/R2_PROGRESS.md`. | Process documentation; no automated test class. |
 | **4** | COMPLETE PREMIUM DESIGN SYSTEM | **partial** | `ThemePresetsTest.hasTenUniquePresets`, `ThemePresetsTest.unknownIdFallsBackToFirstPreset`, `ThemeRegistryTest.testAllTenDistinctThemesExist`. | Only 10 presets exist; 12 presets mandated (missing 2 presets) and theme export/import UI not built. |
 | **5** | PREMIUM NEXUS HOME | **partial** | `LogicTest.category_presentListsOnlyExistingCategoriesInOrder`, `PrefsLogicTest.withRecent_movesToFrontWithoutDuplicates`, `PrefsLogicTest.toggled_addsThenRemoves`. | Assistant direct launch trigger from TV home screen missing. |
-| **6** | DEFAULT ANDROID HOME INTEGRATION | **partial** | `LogicTest.category_mapsDeclaredCategoryAndSystemFlag`, `HomeAlias` activity-alias in `app-tv/AndroidManifest.xml`. | User manual selection on physical Android 10 TV stick missing. |
+| **6** | DEFAULT ANDROID HOME INTEGRATION | **partial** | `LogicTest.category_mapsDeclaredCategoryAndSystemFlag`, `HomeAlias` activity-alias in `app-tv/AndroidManifest.xml`, `TvLauncherLogicTest.testHomeIntentRecognition`, `TvLauncherLogicTest.testLeanbackIntentRecognition`, `TvLauncherLogicTest.testShouldSuppressBackOnHome`. | User manual selection on physical Android 10 TV stick missing. |
 | **7** | ADVANCED APPLICATION LIBRARY | **partial** | `LogicTest.search_isCaseInsensitiveAndPrefersPrefixMatches`, `LogicTest.category_mapsDeclaredCategoryAndSystemFlag`. | App hide and restore toggle UI missing. |
 | **8** | ADVANCED WALLPAPER ENGINE | **partial** | `ThemePresetsTest.backgroundCodecRoundTripsAndRejectsGarbage`, `ThemePresetsTest.backgroundOverrideWinsOverPresetDefault`. | Eviction logic for oversized imported wallpaper files on TV storage missing. |
 | **9** | CUSTOM HOME LAYOUT EDITOR | **done untested** | `HomeLayout` enum (Spotlight, Rows, Compact) in `core:common`. | Visual drag-and-drop layout row editor UI on TV missing. |
-| **10** | NEXUS STARTUP EXPERIENCE | **done untested** | Wordmark splash in `TvApp.kt`. | Startup audio chord asset and sound playback missing. |
+| **10** | NEXUS STARTUP EXPERIENCE | **partial** | Wordmark splash in `TvApp.kt`, `TvLauncherLogicTest.testStartupConfigModes`. | Startup audio chord asset and firmware boot animation research missing. |
 | **11** | QUICK SETTINGS | **partial** | `TvScreensaverTest.testQuickSettingsLifecycle`. | Quick settings button focus state on physical TV remote missing. |
 | **12** | NEXUS SCREENSAVER | **partial** | `TvScreensaverTest.testIdleTimeoutTriggersScreensaver`, `TvScreensaverTest.testUserActivityWakesScreensaver`. | Ambient dimming integration with hardware display power states missing. |
 | **13** | DEVICE DASHBOARD | **partial** | `DeviceMetricFormatterTest.testFormatBytes`, `DeviceMetricFormatterTest.testFormatMemorySummary`, `DeviceMetricFormatterTest.testFormatStorageSummary`, `DeviceMetricFormatterTest.testFormatUptime`, `DeviceMetricFormatterTest.testFormatNetworkLabel`. | Live network ping/latency measurement on physical device missing. |
@@ -40,7 +41,7 @@
 | **19** | MOBILE NEXUS TV MANAGEMENT | **partial** | `TvManagementProtocolTest.testGetInstalledAppsFromMobile`, `TvManagementProtocolTest.testSetThemePresetFromMobile`, `TvManagementProtocolTest.testSetWallpaperFromMobile`, `TvManagementProtocolTest.testSetFavouritesFromMobile`, `TvManagementProtocolTest.testRejectUnauthorizedManagementRequest`. | Mobile UI management screen for installed apps, wallpaper picker, and favourites reordering missing. |
 | **20** | ONE ASSISTANT ACROSS BOTH DEVICES | **partial** | `NexusAiIntentParserTest.testAppLaunchIntent`, `NexusAiIntentParserTest.testVolumeIntent`, `NexusAiIntentParserTest.testTamilVoiceCommands`. | End-to-end chat UI dispatch to TV execution over live socket missing. |
 | **21** | COMPLETE VOICE PIPELINE | **partial** | `NexusVoiceSessionManagerTest.testVoiceSessionFlow`, `NexusVoiceSessionManagerTest.testWakeWordStatusInspection`. | Android `SpeechRecognizer` audio recording and TTS speech playback on devices missing. |
-| **22** | TV-ONLY ASSISTANT | **not started** | None. | Direct TV assistant dialogue with Android `TextToSpeech` playback on TV speakers missing. |
+| **22** | TV-ONLY ASSISTANT | **partial** | `TvAssistantDialogueEngineTest.testStorageQuerySpeechResponse`, `TvAssistantDialogueEngineTest.testSettingsAndAppsQueries`, `TvAssistantDialogueEngineTest.testMissingTvMicrophoneFallbackHelp`, `TvAssistantDialogueEngineTest.testAppLaunchThroughAssistant`. | Direct Android TextToSpeech speech audio playback on physical TV speakers missing. |
 | **23** | STRUCTURED COMMAND ENGINE | **partial** | `TvNetworkManagerTest.testKeyCodeMapping`, `TvNetworkManagerTest.testCommandHandlerInvocation`, `RemoteModelsTest.testRemoteCommandCreation`. | Destructive action confirmation dialog missing. |
 | **24** | AI PROVIDER MANAGER — COMPLETE IMPLEMENTATION | **partial** | `NexusAiIntentParserTest.testBlankApiKeyConnectionTest`, `ProviderValidatorTest.garbageUrl_isRejected`, `ProviderValidatorTest.localServer_allowsHttpAndNoKey`, `ProviderValidatorTest.cloudProvider_needsHttpsModelAndKey`. | Live network call to Gemini/OpenAI (requires user-provided API key) missing. |
 | **25** | API KEY ENTRY ON PHONE AND TV | **done untested** | Mobile `SettingsScreen.kt` with `SecretCipher` AES-GCM Keystore storage. | Masked API key entry on TV Settings missing. |
@@ -58,7 +59,7 @@
 | **37** | BACKUP AND RESTORE | **partial** | `NexusBackupManagerTest.testExportExcludesApiKeysAndTokens`, `NexusBackupManagerTest.testExportAndRestoreRoundTrip`, `NexusBackupManagerTest.testRestoreRejectsMalformedJson`, `NexusBackupManagerTest.testWallpaperReferenceSafety`. | User-facing file picker on Android UI to save/load backup JSON to external storage missing. |
 | **38** | MULTI-DEVICE SESSION MANAGEMENT | **partial** | `PairingProtocolTest.testRevokedDeviceAuthenticationAndCommandRejection`. | Multi-phone concurrent active session list in TV Settings missing. |
 | **39** | NOTIFICATION AND EVENT CENTRE | **partial** | `NexusEventStoreTest.testAddEventAndListNewestFirst`, `NexusEventStoreTest.testBoundedCapacityEviction`, `NexusEventStoreTest.testMarkAsReadAndUnreadCount`, `NexusEventStoreTest.testClearAll`. | Visual notification drawer UI missing. |
-| **40** | SOUND AND FEEDBACK SYSTEM | **done untested** | `TvAudioEngine.kt` in `app-tv`. | Sound assets bundled and wired to keypress events missing. |
+| **40** | SOUND AND FEEDBACK SYSTEM | **partial** | `TvAudioConfigTest.testVolumeClamping`, `TvAudioConfigTest.testQuietModeSuppressesAllSounds`, `TvAudioConfigTest.testIndividualSoundCategoryToggles`, `TvAudioConfigTest.testAudioToneGeneratorSamples`. | Sound audio wave assets and physical speaker playback verification missing. |
 | **41** | CONNECTION RECOVERY | **partial** | `PairingProtocolTest.testReconnectionFlow`, `MobileRemoteManagerTest.testReconnectionUsingSavedCredentials`. | Exponential backoff retry loop on background resume missing. |
 | **42** | USER PROFILES | **partial** | `UserProfileTest.testDefaultProfileCannotBeDeleted`, `UserProfileTest.testAddAndSwitchProfilesWithSettingsIsolation`, `UserProfileTest.testBoundedProfileCountEnforced`, `UserProfileTest.testDeleteNonDefaultProfileAndFallbackToDefault`, `UserProfileTest.testRejectBlankProfileName`. | TV settings profile switching carousel UI missing. |
 | **43** | APP COMPATIBILITY INFORMATION | **partial** | `RemoteModelsTest.testAppCapabilityRegistry`. | Additional third-party streaming apps in registry matrix missing. |
@@ -68,7 +69,7 @@
 | **47** | LOW-MEMORY OPTIMISATION | **done untested** | Lean socket server, no local LLM on TV, memory cache bounds. | Actual physical heap measurement on 2 GB Motorola stick under load missing. |
 | **48** | FAILURE HANDLING | **partial** | `PairingProtocolTest.testRejectedPairingAtSecurityGate`, `MobileRemoteManagerTest.testInvalidPinRejection`. | Failure recovery UI on physical network loss missing. |
 | **49** | ANDROID APP STRUCTURE | **done untested** | TV Leanback manifest, Mobile launcher manifest, exported activities configured. | Android CTS / lint structure verification missing. |
-| **50** | AUTOMATED TESTING | **partial** | 86 passing unit tests across core:common (23), core:ai (6), core:remote (24), app-tv (18), app-mobile (15), 0 failures. | Instrumented UI and integration tests on target hardware missing. |
+| **50** | AUTOMATED TESTING | **partial** | 104 passing unit tests across core:common (23), core:ai (10), core:remote (24), core:automation (6), app-tv (26), app-mobile (15), 0 failures. | Instrumented UI and integration tests on target hardware missing. |
 | **51** | BUILD AND APK DELIVERY | **partial** | `:app-tv:assembleDebug` and `:app-mobile:assembleDebug` completed successfully. Built outputs: `app-tv/build/outputs/apk/debug/app-tv-debug.apk` (11M), `app-mobile/build/outputs/apk/debug/app-mobile-debug.apk` (11M). | Physical sideloading on target hardware missing. |
 | **52** | PHYSICAL DEVICE VERIFICATION | **not started** | Verification instructions documented in spec. | Physical testing on Samsung Galaxy F54 and Motorola TV Stick. |
 
