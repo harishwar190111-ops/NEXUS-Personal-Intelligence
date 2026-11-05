@@ -13,6 +13,11 @@ import com.nexus.personalintelligence.core.common.ui.BackgroundSpec
 import com.nexus.personalintelligence.core.common.ui.BackgroundType
 import com.nexus.personalintelligence.core.common.ui.CustomTheme
 import com.nexus.personalintelligence.core.remote.PairedDevice
+import com.nexus.personalintelligence.core.remote.diagnostics.CommandHistoryTracker
+import com.nexus.personalintelligence.core.remote.events.EventCategory
+import com.nexus.personalintelligence.core.remote.events.EventSeverity
+import com.nexus.personalintelligence.core.remote.events.NexusEvent
+import com.nexus.personalintelligence.core.remote.events.NexusEventStore
 import com.nexus.personalintelligence.tv.network.SecurityGateRequest
 import com.nexus.personalintelligence.tv.network.TvCommandDispatcher
 import com.nexus.personalintelligence.tv.network.TvNetworkManager
@@ -36,9 +41,16 @@ import kotlinx.coroutines.launch
 class TvViewModel(app: Application) : AndroidViewModel(app) {
     private val appRepo = AppRepository(app)
     private val prefsRepo = TvPrefsRepository(app)
+    val eventStore = NexusEventStore()
+    val historyTracker = CommandHistoryTracker()
     val networkManager = TvNetworkManager()
     val screensaverManager = TvScreensaverManager()
-    private val commandDispatcher = TvCommandDispatcher(app, appRepo)
+    private val commandDispatcher = TvCommandDispatcher(
+        context = app,
+        appRepo = appRepo,
+        historyTracker = historyTracker,
+        eventStore = eventStore
+    )
 
     val securityGateRequest: StateFlow<SecurityGateRequest?> = networkManager.securityGateRequest
     val pairedDevices: StateFlow<List<PairedDevice>> = networkManager.pairedDevices

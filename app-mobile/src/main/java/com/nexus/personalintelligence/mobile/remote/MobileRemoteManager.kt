@@ -8,6 +8,12 @@ import com.nexus.personalintelligence.core.remote.NexusSocketClient
 import com.nexus.personalintelligence.core.remote.PairingResponse
 import com.nexus.personalintelligence.core.remote.PairingStatus
 import com.nexus.personalintelligence.core.remote.RemoteCommand
+import com.nexus.personalintelligence.core.remote.diagnostics.CommandHistoryEntry
+import com.nexus.personalintelligence.core.remote.diagnostics.CommandHistoryTracker
+import com.nexus.personalintelligence.core.remote.events.EventCategory
+import com.nexus.personalintelligence.core.remote.events.EventSeverity
+import com.nexus.personalintelligence.core.remote.events.NexusEvent
+import com.nexus.personalintelligence.core.remote.events.NexusEventStore
 import com.nexus.personalintelligence.mobile.data.PairedTvInfo
 import com.nexus.personalintelligence.mobile.data.PairedTvStorage
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +28,8 @@ import java.util.UUID
 class MobileRemoteManager(
     private val storage: PairedTvStorage,
     private val client: NexusSocketClient = NexusSocketClient(),
+    val historyTracker: CommandHistoryTracker = CommandHistoryTracker(),
+    val eventStore: NexusEventStore = NexusEventStore(),
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) {
     val connectionState: StateFlow<ConnectionState> = client.connectionState
@@ -45,6 +53,14 @@ class MobileRemoteManager(
         if (!connected) {
             _pairingStatus.value = PairingStatus.REJECTED
             _statusMessage.value = "Could not reach TV at $host:$port. Ensure both devices are on the same Wi-Fi network."
+            eventStore.addEvent(
+                NexusEvent(
+                    title = "Pairing Failed",
+                    message = "Could not reach TV at $host:$port",
+                    severity = EventSeverity.WARNING,
+                    category = EventCategory.PAIRING
+                )
+            )
             return PairingResponse(status = PairingStatus.REJECTED, message = "Connection failed")
         }
 
@@ -54,8 +70,24 @@ class MobileRemoteManager(
 
         if (pairResp.status == PairingStatus.PENDING_APPROVAL) {
             _statusMessage.value = "Pairing approved on TV. Please enter the 6-digit PIN shown on the TV screen."
+            eventStore.addEvent(
+                NexusEvent(
+                    title = "Pairing Pending",
+                    message = "Awaiting 6-digit PIN verification for $deviceName",
+                    severity = EventSeverity.INFO,
+                    category = EventCategory.PAIRING
+                )
+            )
         } else {
             _statusMessage.value = pairResp.message.ifBlank { "Pairing rejected by TV" }
+            eventStore.addEvent(
+                NexusEvent(
+                    title = "Pairing Rejected",
+                    message = pairResp.message.ifBlank { "Pairing rejected by TV" },
+                    severity = EventSeverity.WARNING,
+                    category = EventCategory.PAIRING
+                )
+            )
         }
         return pairResp
     }
@@ -76,10 +108,34 @@ class MobileRemoteManager(
                 pairedAt = System.currentTimeMillis()
             )
             storage.savePairedTv(info)
+            eventStore.addEvent(
+                NexusEvent(
+                    title = "Pairing Complete",
+                    message = "Paired with ${verifyResp.tvDeviceName}",
+                    severity = EventSeverity.SUCCESS,
+                    category = EventCategory.PAIRING
+                )
+            )
         } else if (verifyResp.status == PairingStatus.INVALID_PIN) {
             _statusMessage.value = verifyResp.message.ifBlank { "Invalid PIN. Please check the TV screen." }
+            eventStore.addEvent(
+                NexusEvent(
+                    title = "Invalid PIN",
+                    message = "Incorrect PIN entered",
+                    severity = EventSeverity.WARNING,
+                    category = EventCategory.PAIRING
+                )
+            )
         } else if (verifyResp.status == PairingStatus.EXPIRED) {
             _statusMessage.value = "PIN expired. Please initiate pairing again."
+            eventStore.addEvent(
+                NexusEvent(
+                    title = "PIN Expired",
+                    message = "PIN expired",
+                    severity = EventSeverity.WARNING,
+                    category = EventCategory.PAIRING
+                )
+            )
         } else {
             _statusMessage.value = verifyResp.message.ifBlank { "Pairing failed" }
         }
@@ -96,21 +152,62 @@ class MobileRemoteManager(
         val connected = client.connect(info.host, info.port)
         if (!connected) {
             _statusMessage.value = "TV is unreachable at ${info.host}."
+            eventStore.addEvent(
+                NexusEvent(
+                    title = "Reconnect Failed",
+                    message = "TV unreachable at ${info.host}",
+                    severity = EventSeverity.WARNING,
+                    category = EventCategory.PAIRING
+                )
+            )
             return false
         }
 
         val auth = client.authenticate(info.deviceId, info.sessionToken, Build.MODEL ?: "Android Phone")
         if (auth.status == com.nexus.personalintelligence.core.remote.HandshakeStatus.SUCCESS) {
             _statusMessage.value = "Connected to ${info.tvDeviceName}"
+            eventStore.addEvent(
+                NexusEvent(
+                    title = "Connected",
+                    message = "Connected to ${info.tvDeviceName}",
+                    severity = EventSeverity.SUCCESS,
+                    category = EventCategory.PAIRING
+                )
+            )
             return true
         } else {
             _statusMessage.value = "Authentication failed: ${auth.message}"
+            eventStore.addEvent(
+                NexusEvent(
+                    title = "Auth Failed",
+                    message = auth.message,
+                    severity = EventSeverity.ALERT,
+                    category = EventCategory.PAIRING
+                )
+            )
             return false
         }
     }
 
     suspend fun sendCommand(command: RemoteCommand): CommandResult {
-        return client.sendCommand(command)
+        val result = client.sendCommand(command)
+        historyTracker.addEntry(
+            CommandHistoryEntry(
+                commandId = command.commandId,
+                type = command.type.name,
+                success = result.success,
+                message = result.message
+            )
+        )
+        eventStore.addEvent(
+            NexusEvent(
+                title = "Command: ${command.type.name}",
+                message = result.message,
+                severity = if (result.success) EventSeverity.INFO else EventSeverity.WARNING,
+                category = EventCategory.COMMAND
+            )
+        )
+        return result
     }
 
     fun disconnect() {

@@ -8,16 +8,25 @@ import android.view.KeyEvent
 import com.nexus.personalintelligence.core.remote.CommandResult
 import com.nexus.personalintelligence.core.remote.RemoteCommand
 import com.nexus.personalintelligence.core.remote.RemoteCommandType
+import com.nexus.personalintelligence.core.remote.diagnostics.CommandHistoryEntry
+import com.nexus.personalintelligence.core.remote.diagnostics.CommandHistoryTracker
+import com.nexus.personalintelligence.core.remote.events.EventCategory
+import com.nexus.personalintelligence.core.remote.events.EventSeverity
+import com.nexus.personalintelligence.core.remote.events.NexusEvent
+import com.nexus.personalintelligence.core.remote.events.NexusEventStore
 import com.nexus.personalintelligence.tv.data.AppRepository
 import com.nexus.personalintelligence.tv.data.LaunchResult
 
 class TvCommandDispatcher(
     private val context: Context,
     private val appRepo: AppRepository = AppRepository(context),
+    val historyTracker: CommandHistoryTracker = CommandHistoryTracker(),
+    val eventStore: NexusEventStore = NexusEventStore(),
     private val onTextReceived: ((String) -> Unit)? = null
 ) {
     suspend fun dispatch(command: RemoteCommand): CommandResult {
-        return try {
+        val startNs = SystemClock.elapsedRealtimeNanos()
+        val result = try {
             when (command.type) {
                 RemoteCommandType.LAUNCH_APP -> {
                     val pkg = command.packageName
@@ -72,6 +81,29 @@ class TvCommandDispatcher(
                 message = "Execution failed: ${e.message}"
             )
         }
+
+        val latencyMs = (SystemClock.elapsedRealtimeNanos() - startNs) / 1_000_000L
+
+        historyTracker.addEntry(
+            CommandHistoryEntry(
+                commandId = command.commandId,
+                type = command.type.name,
+                success = result.success,
+                message = result.message,
+                latencyMs = latencyMs
+            )
+        )
+
+        eventStore.addEvent(
+            NexusEvent(
+                title = "Command: ${command.type.name}",
+                message = result.message,
+                severity = if (result.success) EventSeverity.INFO else EventSeverity.WARNING,
+                category = EventCategory.COMMAND
+            )
+        )
+
+        return result
     }
 
     companion object {

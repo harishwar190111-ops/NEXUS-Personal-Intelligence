@@ -175,6 +175,10 @@ class MobileRemoteManagerTest {
         assertEquals(RemoteCommandType.PLAY_PAUSE, receivedCommands[1].type)
         assertEquals(RemoteCommandType.TEXT_INPUT, receivedCommands[2].type)
         assertEquals("வணக்கம்", receivedCommands[2].text)
+
+        // Verify command history and event store tracking
+        assertEquals(3, mgr.historyTracker.size())
+        assertTrue("Event store should track pairing and command events", mgr.eventStore.size() >= 3)
     }
 
     @Test
