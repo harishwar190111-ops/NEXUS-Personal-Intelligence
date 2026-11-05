@@ -8,10 +8,10 @@
 - **Passing Test Counts from Fresh XML**:
   - `core:common`: 23 tests, 0 failures
   - `core:ai`: 6 tests, 0 failures
-  - `core:remote`: 19 tests, 0 failures
+  - `core:remote`: 24 tests, 0 failures
   - `app-tv`: 18 tests, 0 failures
   - `app-mobile`: 15 tests, 0 failures
-  - **Subtotal**: 81 passed, 0 failures across active R2 target modules.
+  - **Subtotal**: 86 passed, 0 failures across active R2 target modules.
 
 ---
 
@@ -37,7 +37,7 @@
 | **16** | MOBILE NAVIGATION AND VISUAL DESIGN | **done untested** | `MobileApp.kt` bottom navigation bar with 6 tabs (Home, Remote, Assistant, Devices, Settings, More). | UI automated tests for navigation tabs missing. |
 | **17** | SECURE PHONE-TO-TV PAIRING | **partial** | `PairingProtocolTest.testSuccessfulPairingAndCommandExecution`, `PairingProtocolTest.testRejectedPairingAtSecurityGate`, `PairingProtocolTest.testInvalidPairingPin`, `PairingProtocolTest.testMaxAttemptsExceededOnInvalidPin`, `PairingProtocolTest.testPairingPinExpiry`, `PairingProtocolTest.testPinIsSixDigitsWithoutLeadingZero`, `PairingProtocolTest.testHeartbeatPingPong`, `PairingProtocolTest.testHandshakeAuthenticationWithSessionToken`, `MobileRemoteManagerTest.testCompletePairingWorkflowAndStorage`, `MobileRemoteManagerTest.testInvalidPinRejection`. | QR-code visual pairing fallback missing. |
 | **18** | FULL MOBILE REMOTE | **partial** | `MobileRemoteManagerTest.testSendRemoteCommandsAndTamilTextInput`, `TvNetworkManagerTest.testKeyCodeMapping`. | Physical remote latency measurement on TV stick hardware missing. |
-| **19** | MOBILE NEXUS TV MANAGEMENT | **not started** | None. | Remote listing of TV installed apps, remote theme/wallpaper changing from mobile missing. |
+| **19** | MOBILE NEXUS TV MANAGEMENT | **partial** | `TvManagementProtocolTest.testGetInstalledAppsFromMobile`, `TvManagementProtocolTest.testSetThemePresetFromMobile`, `TvManagementProtocolTest.testSetWallpaperFromMobile`, `TvManagementProtocolTest.testSetFavouritesFromMobile`, `TvManagementProtocolTest.testRejectUnauthorizedManagementRequest`. | Mobile UI management screen for installed apps, wallpaper picker, and favourites reordering missing. |
 | **20** | ONE ASSISTANT ACROSS BOTH DEVICES | **partial** | `NexusAiIntentParserTest.testAppLaunchIntent`, `NexusAiIntentParserTest.testVolumeIntent`, `NexusAiIntentParserTest.testTamilVoiceCommands`. | End-to-end chat UI dispatch to TV execution over live socket missing. |
 | **21** | COMPLETE VOICE PIPELINE | **partial** | `NexusVoiceSessionManagerTest.testVoiceSessionFlow`, `NexusVoiceSessionManagerTest.testWakeWordStatusInspection`. | Android `SpeechRecognizer` audio recording and TTS speech playback on devices missing. |
 | **22** | TV-ONLY ASSISTANT | **not started** | None. | Direct TV assistant dialogue with Android `TextToSpeech` playback on TV speakers missing. |
@@ -68,7 +68,7 @@
 | **47** | LOW-MEMORY OPTIMISATION | **done untested** | Lean socket server, no local LLM on TV, memory cache bounds. | Actual physical heap measurement on 2 GB Motorola stick under load missing. |
 | **48** | FAILURE HANDLING | **partial** | `PairingProtocolTest.testRejectedPairingAtSecurityGate`, `MobileRemoteManagerTest.testInvalidPinRejection`. | Failure recovery UI on physical network loss missing. |
 | **49** | ANDROID APP STRUCTURE | **done untested** | TV Leanback manifest, Mobile launcher manifest, exported activities configured. | Android CTS / lint structure verification missing. |
-| **50** | AUTOMATED TESTING | **partial** | 81 passing unit tests across core:common (23), core:ai (6), core:remote (19), app-tv (18), app-mobile (15), 0 failures. | Instrumented UI and integration tests on target hardware missing. |
+| **50** | AUTOMATED TESTING | **partial** | 86 passing unit tests across core:common (23), core:ai (6), core:remote (24), app-tv (18), app-mobile (15), 0 failures. | Instrumented UI and integration tests on target hardware missing. |
 | **51** | BUILD AND APK DELIVERY | **partial** | `:app-tv:assembleDebug` and `:app-mobile:assembleDebug` completed successfully. Built outputs: `app-tv/build/outputs/apk/debug/app-tv-debug.apk` (11M), `app-mobile/build/outputs/apk/debug/app-mobile-debug.apk` (11M). | Physical sideloading on target hardware missing. |
 | **52** | PHYSICAL DEVICE VERIFICATION | **not started** | Verification instructions documented in spec. | Physical testing on Samsung Galaxy F54 and Motorola TV Stick. |
 
