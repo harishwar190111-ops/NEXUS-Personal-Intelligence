@@ -4,7 +4,7 @@
 
 - **Audit Date**: 2026-11-05
 - **Branch**: `feature/nexus-release2-implementation`
-- **HEAD Commit**: uncommitted work after d17fe65
+- **HEAD Commit**: uncommitted work after 06b88b2
 - **Passing Test Counts from Fresh XML**:
   - `core:common`: 23 tests, 0 failures
   - `core:ai`: 6 tests, 0 failures
@@ -50,7 +50,7 @@
 | **29** | UNIVERSAL SEARCH | **partial** | `LogicTest.search_isCaseInsensitiveAndPrefersPrefixMatches`. | Unified query across apps, settings, and web shortcuts simultaneously missing. |
 | **30** | FAVOURITES AND SMART SHORTCUTS | **partial** | `LogicTest.shortcuts_roundTripAndSkipBrokenLines`, `LogicTest.url_defaultNameDropsWww`, `PrefsLogicTest.toggled_addsThenRemoves`. | Smart shortcut row customization UI missing. |
 | **31** | RECENT ACTIVITY | **partial** | `PrefsLogicTest.withRecent_capsLength`, `PrefsLogicTest.withRecent_movesToFrontWithoutDuplicates`, `PrefsLogicTest.encodeDecode_roundTrips`. | Command execution history log viewer missing. |
-| **32** | SCHEDULED ACTIONS | **partial** | `NexusAutomationEngineTest.testAutomationApprovalAndExecution`. | Android AlarmManager scheduler implementation missing. |
+| **32** | SCHEDULED ACTIONS | **partial** | `ScheduledItemTest.testOnceRuleCalculationAndCompletion`, `ScheduledItemTest.testDailyRepeatingNextRunCalculation`, `ScheduledItemTest.testRequiresApprovalFlagRespected`, `ScheduledItemTest.testDisabledItemReturnsNull`, `ScheduledItemTest.testStoreItemManagementAndDueQuery`, `NexusAutomationEngineTest.testAutomationApprovalAndExecution`. | Android AlarmManager system integration and scheduler UI missing. |
 | **33** | CUSTOM SCREENSAVER | **partial** | `TvScreensaverTest.testDisabledScreensaverTimeout`. | Spec's 5/15/off timeout options UI selector missing. |
 | **34** | DEVICE DASHBOARD (HARDWARE METRICS) | **done untested** | `DeviceInfo.kt` on TV and mobile dashboard tiles. | Live network ping/latency measurement missing. |
 | **35** | DIAGNOSTICS AND COMMAND HISTORY | **partial** | `DiagnosticsReportTest.testCommandHistoryBoundedCapacity`, `DiagnosticsReportTest.testSecretRedactionFromDiagnosticExport`. | UI diagnostic export button in Settings missing. |
