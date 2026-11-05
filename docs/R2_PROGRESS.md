@@ -4,14 +4,14 @@
 
 - **Audit Date**: 2026-11-05
 - **Branch**: `feature/nexus-release2-implementation`
-- **HEAD Commit**: uncommitted work after 2d2f553
+- **HEAD Commit**: uncommitted work after 270ad11
 - **Passing Test Counts from Fresh XML**:
-  - `core:common`: 18 tests, 0 failures
+  - `core:common`: 23 tests, 0 failures
   - `core:ai`: 6 tests, 0 failures
   - `core:remote`: 19 tests, 0 failures
   - `app-tv`: 18 tests, 0 failures
   - `app-mobile`: 15 tests, 0 failures
-  - **Subtotal**: 76 passed, 0 failures across active R2 target modules.
+  - **Subtotal**: 81 passed, 0 failures across active R2 target modules.
 
 ---
 
@@ -31,7 +31,7 @@
 | **10** | NEXUS STARTUP EXPERIENCE | **done untested** | Wordmark splash in `TvApp.kt`. | Startup audio chord asset and sound playback. |
 | **11** | QUICK SETTINGS | **done and tested** | `TvScreensaverTest.testQuickSettingsLifecycle`. | Quick settings button focus state on physical TV remote. |
 | **12** | NEXUS SCREENSAVER | **done and tested** | `TvScreensaverTest.testIdleTimeoutTriggersScreensaver`, `TvScreensaverTest.testUserActivityWakesScreensaver`. | Ambient dimming integration with hardware display power states. |
-| **13** | DEVICE DASHBOARD | **done untested** | `DeviceInfo.collect` in `app-tv`. | Unit test for hardware metric parsing; requires Android runtime. |
+| **13** | DEVICE DASHBOARD | **done and tested** | `DeviceMetricFormatterTest.testFormatBytes`, `DeviceMetricFormatterTest.testFormatMemorySummary`, `DeviceMetricFormatterTest.testFormatStorageSummary`, `DeviceMetricFormatterTest.testFormatUptime`, `DeviceMetricFormatterTest.testFormatNetworkLabel`. | Live network ping/latency measurement on physical device. |
 | **14** | SAFE ANDROID SETTINGS ACCESS | **done and tested** | `LogicTest.url_normalizationAcceptsOnlyHttpWebAddresses`. | Physical verification that Motorola settings intent resolves. |
 | **15** | COMPLETE MOBILE DASHBOARD | **done untested** | `HomeScreen.kt` in `app-mobile` shows paired TV tile and remote shortcut. | Compose UI instrumentation test. |
 | **16** | MOBILE NAVIGATION AND VISUAL DESIGN | **done untested** | `MobileApp.kt` bottom navigation bar with 6 tabs (Home, Remote, Assistant, Devices, Settings, More). | UI automated tests for navigation tabs. |
@@ -68,7 +68,7 @@
 | **47** | LOW-MEMORY OPTIMISATION | **done untested** | Lean socket server, no local LLM on TV, memory cache bounds. | Actual physical heap measurement on 2 GB Motorola stick under load. |
 | **48** | FAILURE HANDLING | **done and tested** | `PairingProtocolTest.testRejectedPairingAtSecurityGate`, `MobileRemoteManagerTest.testInvalidPinRejection`. | Failure recovery UI on physical network loss. |
 | **49** | ANDROID APP STRUCTURE | **done untested** | TV Leanback manifest, Mobile launcher manifest, exported activities configured. | Android CTS / lint structure verification. |
-| **50** | AUTOMATED TESTING | **partial** | 76 passing unit tests across core:common (18), core:ai (6), core:remote (19), app-tv (18), app-mobile (15), 0 failures. | Instrumented UI and integration tests on target hardware. |
+| **50** | AUTOMATED TESTING | **partial** | 81 passing unit tests across core:common (23), core:ai (6), core:remote (19), app-tv (18), app-mobile (15), 0 failures. | Instrumented UI and integration tests on target hardware. |
 | **51** | BUILD AND APK DELIVERY | **done and tested** | `:app-tv:assembleDebug` and `:app-mobile:assembleDebug` completed successfully. Built outputs: `app-tv/build/outputs/apk/debug/app-tv-debug.apk` (11M), `app-mobile/build/outputs/apk/debug/app-mobile-debug.apk` (11M). | Physical sideloading on target hardware. |
 | **52** | PHYSICAL DEVICE VERIFICATION | **not started** | Verification instructions documented in spec. | Physical testing on Samsung Galaxy F54 and Motorola TV Stick. |
 
