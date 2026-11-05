@@ -8,6 +8,7 @@ import com.nexus.personalintelligence.core.remote.NexusSocketClient
 import com.nexus.personalintelligence.core.remote.PairingResponse
 import com.nexus.personalintelligence.core.remote.PairingStatus
 import com.nexus.personalintelligence.core.remote.RemoteCommand
+import com.nexus.personalintelligence.core.remote.RemoteCommandType
 import com.nexus.personalintelligence.core.remote.diagnostics.CommandHistoryEntry
 import com.nexus.personalintelligence.core.remote.diagnostics.CommandHistoryTracker
 import com.nexus.personalintelligence.core.remote.events.EventCategory
@@ -191,23 +192,32 @@ class MobileRemoteManager(
 
     suspend fun sendCommand(command: RemoteCommand): CommandResult {
         val result = client.sendCommand(command)
+        val safeMessage = if (command.type == RemoteCommandType.TEXT_INPUT) {
+            "Text input delivered"
+        } else {
+            result.message
+        }
         historyTracker.addEntry(
             CommandHistoryEntry(
                 commandId = command.commandId,
                 type = command.type.name,
                 success = result.success,
-                message = result.message
+                message = safeMessage
             )
         )
         eventStore.addEvent(
             NexusEvent(
                 title = "Command: ${command.type.name}",
-                message = result.message,
+                message = safeMessage,
                 severity = if (result.success) EventSeverity.INFO else EventSeverity.WARNING,
                 category = EventCategory.COMMAND
             )
         )
-        return result
+        return if (command.type == RemoteCommandType.TEXT_INPUT) {
+            result.copy(message = safeMessage)
+        } else {
+            result
+        }
     }
 
     fun disconnect() {

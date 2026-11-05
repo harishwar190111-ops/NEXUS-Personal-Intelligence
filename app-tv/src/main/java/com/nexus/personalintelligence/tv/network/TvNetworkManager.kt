@@ -6,6 +6,13 @@ import com.nexus.personalintelligence.core.remote.CommandResult
 import com.nexus.personalintelligence.core.remote.NexusSocketServer
 import com.nexus.personalintelligence.core.remote.PairedDevice
 import com.nexus.personalintelligence.core.remote.RemoteCommand
+import com.nexus.personalintelligence.core.remote.management.TvInstalledApp
+import com.nexus.personalintelligence.core.remote.management.TvManagementAction
+import com.nexus.personalintelligence.core.remote.management.TvManagementProtocolHandler
+import com.nexus.personalintelligence.core.remote.management.TvManagementResponse
+import com.nexus.personalintelligence.tv.data.AppRepository
+import com.nexus.personalintelligence.tv.data.TvPrefs
+import com.nexus.personalintelligence.tv.data.TvPrefsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -13,6 +20,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
@@ -27,7 +37,9 @@ data class SecurityGateRequest(
 class TvNetworkManager(
     private val port: Int = 8765,
     private val tvDeviceName: String = Build.MODEL ?: "NEXUS TV",
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    private val appRepo: AppRepository? = null,
+    private val prefsRepo: TvPrefsRepository? = null
 ) {
     private val _securityGateRequest = MutableStateFlow<SecurityGateRequest?>(null)
     val securityGateRequest: StateFlow<SecurityGateRequest?> = _securityGateRequest.asStateFlow()
@@ -40,16 +52,76 @@ class TvNetworkManager(
 
     var commandHandler: (suspend (RemoteCommand) -> CommandResult)? = null
 
+    private fun createManagementHandler(): TvManagementProtocolHandler {
+        if (appRepo == null || prefsRepo == null) {
+            return TvManagementProtocolHandler()
+        }
+        return TvManagementProtocolHandler(
+            appProvider = {
+                runBlocking {
+                    val installed = appRepo.discover()
+                    val favs = prefsRepo.prefs.firstOrNull()?.favourites ?: emptyList()
+                    installed.map {
+                        TvInstalledApp(
+                            packageName = it.packageName,
+                            label = it.label,
+                            isSystemApp = false,
+                            isHidden = false,
+                            isFavourite = favs.contains(it.packageName)
+                        )
+                    }
+                }
+            },
+            stateProvider = {
+                val p = runBlocking { prefsRepo.prefs.firstOrNull() } ?: TvPrefs()
+                val stat = runCatching {
+                    val statFs = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+                    Pair(statFs.availableBytes, statFs.totalBytes)
+                }.getOrDefault(Pair(-1L, -1L))
+                TvManagementResponse(
+                    action = TvManagementAction.GET_TV_STATE,
+                    success = true,
+                    themePresetId = p.presetId,
+                    wallpaperPath = p.imagePath ?: "",
+                    clockStyle24Hour = p.use24Hour,
+                    homeLayout = "ROWS",
+                    favourites = p.favourites,
+                    freeStorageBytes = stat.first,
+                    totalStorageBytes = stat.second
+                )
+            },
+            onThemeChanged = { themeId ->
+                scope.launch { prefsRepo.setPreset(themeId) }
+            },
+            onWallpaperChanged = { path ->
+                scope.launch { prefsRepo.setImagePath(path) }
+            },
+            onFavouritesUpdated = { pkgs ->
+                scope.launch { prefsRepo.setFavourites(pkgs) }
+            },
+            onClockStyleChanged = { use24 ->
+                scope.launch { prefsRepo.setUse24Hour(use24) }
+            },
+            storageMetricsProvider = {
+                runCatching {
+                    val statFs = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+                    Pair(statFs.availableBytes, statFs.totalBytes)
+                }.getOrDefault(Pair(-1L, -1L))
+            }
+        )
+    }
+
     private val server = NexusSocketServer(
         port = port,
         tvDeviceName = tvDeviceName,
         commandDispatcher = { cmd ->
             commandHandler?.invoke(cmd) ?: CommandResult(
                 commandId = cmd.commandId,
-                success = true,
-                message = "Executed ${cmd.type} on TV"
+                success = false,
+                message = "Command handler not wired on TV"
             )
-        }
+        },
+        tvManagementHandler = createManagementHandler()
     )
 
     init {

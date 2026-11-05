@@ -18,7 +18,8 @@ class NexusSocketServer(
     private val commandDispatcher: suspend (RemoteCommand) -> CommandResult = {
         CommandResult(commandId = it.commandId, success = true, message = "Executed ${it.type}")
     },
-    var tvManagementHandler: com.nexus.personalintelligence.core.remote.management.TvManagementProtocolHandler = com.nexus.personalintelligence.core.remote.management.TvManagementProtocolHandler()
+    var tvManagementHandler: com.nexus.personalintelligence.core.remote.management.TvManagementProtocolHandler = com.nexus.personalintelligence.core.remote.management.TvManagementProtocolHandler(),
+    private val pairedDeviceStore: PairedDeviceStore? = null
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val secureRandom = SecureRandom()
@@ -29,6 +30,12 @@ class NexusSocketServer(
 
     val pairedDevices = ConcurrentHashMap<String, PairedDevice>()
 
+    init {
+        pairedDeviceStore?.loadDevices()?.forEach { device ->
+            pairedDevices[device.deviceId] = device
+        }
+    }
+
     // Pending pairing requests awaiting security review gate approval
     data class PendingPairing(
         val clientDeviceId: String,
@@ -36,14 +43,22 @@ class NexusSocketServer(
         val clientIp: String,
         val pin: String,
         var createdAt: Long = System.currentTimeMillis(),
+        var approvedAt: Long = 0L,
         val approveDeferred: CompletableDeferred<Boolean>,
         var isApproved: Boolean = false,
         var attempts: Int = 0,
         val maxAttempts: Int = 3,
         var expiryMs: Long = 60000L
-    )
+    ) {
+        fun isExpired(currentTime: Long = System.currentTimeMillis()): Boolean {
+            val baseTime = if (approvedAt > 0L) approvedAt else createdAt
+            return (currentTime - baseTime) > expiryMs
+        }
+    }
 
     private val pendingPairings = ConcurrentHashMap<String, PendingPairing>()
+    private var lastPairingAttemptTime: Long = 0L
+    private val pairingRateLimitMs: Long = 1000L
 
     var securityGateCallback: ((deviceName: String, clientIp: String, pin: String, onApprove: () -> Unit, onReject: () -> Unit) -> Unit)? = null
 
@@ -100,6 +115,34 @@ class NexusSocketServer(
                     }
                     MessageType.PAIR_REQUEST -> {
                         val req = json.decodeFromString<PairingRequest>(packet.payload)
+                        val now = System.currentTimeMillis()
+
+                        if (now - lastPairingAttemptTime < pairingRateLimitMs) {
+                            val pairResp = PairingResponse(
+                                status = PairingStatus.REJECTED,
+                                tvDeviceName = tvDeviceName,
+                                message = "Rate limit exceeded. Please wait before retrying."
+                            )
+                            val resp = NetworkPacket(type = MessageType.PAIR_RESPONSE, id = packet.id, payload = json.encodeToString(pairResp))
+                            writer.println(json.encodeToString(resp))
+                            continue
+                        }
+                        lastPairingAttemptTime = now
+
+                        // Evict expired pending pairings
+                        pendingPairings.entries.removeIf { it.value.isExpired(now) }
+
+                        if (pendingPairings.isNotEmpty() && !pendingPairings.containsKey(req.clientDeviceId)) {
+                            val pairResp = PairingResponse(
+                                status = PairingStatus.REJECTED,
+                                tvDeviceName = tvDeviceName,
+                                message = "Another pairing request is already pending on TV"
+                            )
+                            val resp = NetworkPacket(type = MessageType.PAIR_RESPONSE, id = packet.id, payload = json.encodeToString(pairResp))
+                            writer.println(json.encodeToString(resp))
+                            continue
+                        }
+
                         // Generate cryptographically secure strictly 6-digit PIN (100000..999999) with no leading zero mismatch
                         val pin = (100000 + secureRandom.nextInt(900000)).toString()
                         val approveDeferred = CompletableDeferred<Boolean>()
@@ -131,6 +174,7 @@ class NexusSocketServer(
 
                         if (approved) {
                             pending.isApproved = true
+                            pending.approvedAt = System.currentTimeMillis() // Expiry starts strictly AFTER TV approval!
                             val pairResp = PairingResponse(
                                 status = PairingStatus.PENDING_APPROVAL,
                                 pin = "", // PIN is kept secret on network; displayed on TV screen
@@ -170,7 +214,7 @@ class NexusSocketServer(
                             )
                             val resp = NetworkPacket(type = MessageType.PAIR_RESPONSE, id = packet.id, payload = json.encodeToString(pairResp))
                             writer.println(json.encodeToString(resp))
-                        } else if (System.currentTimeMillis() - pending.createdAt > pending.expiryMs) {
+                        } else if (pending.isExpired(System.currentTimeMillis())) {
                             pendingPairings.remove(verify.clientDeviceId)
                             val pairResp = PairingResponse(
                                 status = PairingStatus.EXPIRED,
@@ -191,6 +235,7 @@ class NexusSocketServer(
                                     lastSeenAt = System.currentTimeMillis()
                                 )
                                 pairedDevices[verify.clientDeviceId] = device
+                                pairedDeviceStore?.saveDevices(pairedDevices.values.toList())
                                 pendingPairings.remove(verify.clientDeviceId)
                                 currentSessionToken = token
                                 currentDeviceId = verify.clientDeviceId
@@ -310,14 +355,24 @@ class NexusSocketServer(
         }
     }
 
+    fun clearPendingPairings() {
+        pendingPairings.clear()
+        lastPairingAttemptTime = 0L
+    }
+
     fun revokeDevice(deviceId: String): Boolean {
         val dev = pairedDevices[deviceId] ?: return false
         dev.isRevoked = true
+        pairedDeviceStore?.saveDevices(pairedDevices.values.toList())
         return true
     }
 
     fun removeDevice(deviceId: String): Boolean {
-        return pairedDevices.remove(deviceId) != null
+        val ok = pairedDevices.remove(deviceId) != null
+        if (ok) {
+            pairedDeviceStore?.saveDevices(pairedDevices.values.toList())
+        }
+        return ok
     }
 
     fun getPendingPin(deviceId: String): String? = pendingPairings[deviceId]?.pin

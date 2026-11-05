@@ -170,4 +170,55 @@ class TvManagementProtocolTest {
         assertFalse("Unauthorized request must be rejected", resp.success)
         assertTrue(resp.message.contains("Unauthorized") || resp.message.contains("rejected"))
     }
+
+    @Test
+    fun testDefaultUnwiredHandlerReturnsExplicitUnsupportedFailures() {
+        val defaultHandler = TvManagementProtocolHandler()
+
+        val appsResp = defaultHandler.handleRequest(TvManagementRequest(action = TvManagementAction.GET_INSTALLED_APPS))
+        assertFalse(appsResp.success)
+        assertTrue(appsResp.message.contains("unsupported"))
+
+        val themeResp = defaultHandler.handleRequest(TvManagementRequest(action = TvManagementAction.SET_THEME_PRESET, payload = "neon"))
+        assertFalse(themeResp.success)
+        assertTrue(themeResp.message.contains("unsupported"))
+
+        val clockResp = defaultHandler.handleRequest(TvManagementRequest(action = TvManagementAction.SET_CLOCK_STYLE, payload = "24"))
+        assertFalse(clockResp.success)
+        assertTrue(clockResp.message.contains("unsupported"))
+
+        val layoutResp = defaultHandler.handleRequest(TvManagementRequest(action = TvManagementAction.SET_HOME_LAYOUT, payload = "GRID"))
+        assertFalse(layoutResp.success)
+        assertTrue(layoutResp.message.contains("unsupported"))
+
+        val storageResp = defaultHandler.handleRequest(TvManagementRequest(action = TvManagementAction.GET_STORAGE_METRICS))
+        assertFalse(storageResp.success)
+        assertTrue(storageResp.message.contains("unsupported"))
+    }
+
+    @Test
+    fun testWiredClockLayoutAndStorageMetrics() {
+        var clockVal: Boolean? = null
+        var layoutVal: String? = null
+        val handler = TvManagementProtocolHandler(
+            onClockStyleChanged = { clockVal = it },
+            onHomeLayoutChanged = { layoutVal = it },
+            storageMetricsProvider = { Pair(5_000_000_000L, 16_000_000_000L) }
+        )
+
+        val clockResp = handler.handleRequest(TvManagementRequest(action = TvManagementAction.SET_CLOCK_STYLE, payload = "24"))
+        assertTrue(clockResp.success)
+        assertEquals(true, clockVal)
+        assertTrue(clockResp.clockStyle24Hour)
+
+        val layoutResp = handler.handleRequest(TvManagementRequest(action = TvManagementAction.SET_HOME_LAYOUT, payload = "GRID"))
+        assertTrue(layoutResp.success)
+        assertEquals("GRID", layoutVal)
+        assertEquals("GRID", layoutResp.homeLayout)
+
+        val storageResp = handler.handleRequest(TvManagementRequest(action = TvManagementAction.GET_STORAGE_METRICS))
+        assertTrue(storageResp.success)
+        assertEquals(5_000_000_000L, storageResp.freeStorageBytes)
+        assertEquals(16_000_000_000L, storageResp.totalStorageBytes)
+    }
 }

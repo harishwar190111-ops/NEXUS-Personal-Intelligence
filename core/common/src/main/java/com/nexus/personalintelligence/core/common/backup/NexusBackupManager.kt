@@ -77,7 +77,7 @@ class NexusBackupManager(
         return exportedJson
     }
 
-    fun restoreBackupJson(jsonString: String): RestoreResult {
+    fun restoreBackupJson(jsonString: String, currentSupportedVersion: Int = 2): RestoreResult {
         if (jsonString.isBlank()) {
             return RestoreResult.Failure("Empty backup payload")
         }
@@ -85,6 +85,9 @@ class NexusBackupManager(
             val parsed = json.decodeFromString<NexusBackupData>(jsonString)
             if (parsed.version <= 0) {
                 return RestoreResult.Failure("Invalid backup version: ${parsed.version}")
+            }
+            if (parsed.version > currentSupportedVersion) {
+                return RestoreResult.Failure("Unsupported future backup version: ${parsed.version} (current supported version is $currentSupportedVersion)")
             }
             if (parsed.themePresetId.isBlank()) {
                 return RestoreResult.Failure("Missing theme preset ID")

@@ -92,6 +92,12 @@ class TvPrefsRepository(private val context: Context) {
         context.tvDataStore.edit { p -> p.remove(Keys.FAVOURITES) }
     }
 
+    suspend fun setFavourites(favourites: List<String>) {
+        context.tvDataStore.edit { p ->
+            p[Keys.FAVOURITES] = PrefsLogic.encode(favourites)
+        }
+    }
+
     suspend fun setPreset(id: String) {
         context.tvDataStore.edit { p -> p[Keys.PRESET] = id }
     }

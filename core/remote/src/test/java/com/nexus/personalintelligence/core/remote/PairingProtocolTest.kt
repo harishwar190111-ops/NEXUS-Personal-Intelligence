@@ -1,5 +1,7 @@
 package com.nexus.personalintelligence.core.remote
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.*
@@ -157,7 +159,9 @@ class PairingProtocolTest {
         val pending = s.getPendingPairing("phone-expire")
         assertNotNull(pending)
         // Simulate expired timestamp
-        pending?.createdAt = System.currentTimeMillis() - 70000L // 70s ago > 60s expiry
+        val expiredTime = System.currentTimeMillis() - 70000L // 70s ago > 60s expiry
+        pending?.createdAt = expiredTime
+        pending?.approvedAt = expiredTime
 
         val verifyResp = c.verifyPairing("phone-expire", capturedPin.get())
         assertEquals(PairingStatus.EXPIRED, verifyResp.status)
@@ -180,6 +184,7 @@ class PairingProtocolTest {
 
         for (i in 1..5) {
             val devId = "phone-dev-$i"
+            s.clearPendingPairings()
             c.requestPairing(devId, "Device $i")
             val pin = s.getPendingPin(devId)
             assertNotNull(pin)
@@ -293,5 +298,57 @@ class PairingProtocolTest {
         val reconnected = c.reconnect()
         assertTrue("Reconnection should restore authenticated connection", reconnected)
         assertTrue(c.isConnected())
+    }
+
+    @Test
+    fun testSinglePendingPairingRequestEnforced() = runBlocking {
+        val s = server ?: throw IllegalStateException("Server not initialized")
+        val c1 = client ?: throw IllegalStateException("Client not initialized")
+        val c2 = NexusSocketClient()
+
+        s.securityGateCallback = { _, _, _, _, _ ->
+            // Do not approve or reject immediately; keep it pending
+        }
+
+        c1.connect("127.0.0.1", s.actualPort)
+        c2.connect("127.0.0.1", s.actualPort)
+
+        // First client sends pair request (will remain pending)
+        val resp1 = async { c1.requestPairing("phone-first", "Phone 1") }
+        delay(100)
+
+        // Second client attempts pairing while first is pending
+        val resp2 = c2.requestPairing("phone-second", "Phone 2")
+        assertEquals(PairingStatus.REJECTED, resp2.status)
+        assertTrue(resp2.message.contains("already pending") || resp2.message.contains("Rate limit"))
+
+        c2.disconnect()
+        c1.disconnect()
+    }
+
+    @Test
+    fun testPinExpiryStartsAfterTvApproval() = runBlocking {
+        val s = server ?: throw IllegalStateException("Server not initialized")
+        val c = client ?: throw IllegalStateException("Client not initialized")
+
+        var correctPin = ""
+        s.securityGateCallback = { _, _, pin, onApprove, _ ->
+            correctPin = pin
+            onApprove()
+        }
+
+        c.connect("127.0.0.1", s.actualPort)
+        c.requestPairing("phone-expiry", "Samsung Galaxy")
+
+        val pending = s.getPendingPairing("phone-expiry")
+        assertNotNull(pending)
+        assertTrue(pending!!.isApproved)
+        assertTrue("approvedAt must be recorded on approval", pending.approvedAt > 0L)
+
+        // At 10 seconds past approval: not expired
+        assertFalse(pending.isExpired(pending.approvedAt + 10_000L))
+
+        // At 61 seconds past approval: expired
+        assertTrue(pending.isExpired(pending.approvedAt + 61_000L))
     }
 }

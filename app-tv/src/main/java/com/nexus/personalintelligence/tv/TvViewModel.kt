@@ -51,13 +51,47 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val profileStore = UserProfileStore(defaultProfileName = "Main Living Room")
     val backupManager = NexusBackupManager()
     val audioEngine = TvAudioEngine()
-    val networkManager = TvNetworkManager()
+    val networkManager = TvNetworkManager(
+        appRepo = appRepo,
+        prefsRepo = prefsRepo
+    )
     val screensaverManager = TvScreensaverManager()
+    var activeTextReceiver: ((String) -> Boolean)? = null
+
+    private val _receivedTextBuffer = MutableStateFlow("")
+    val receivedTextBuffer: StateFlow<String> = _receivedTextBuffer.asStateFlow()
+
+    fun handleReceivedText(text: String): Boolean {
+        activeTextReceiver?.let { return it(text) }
+        when (text) {
+            "\b" -> {
+                if (_receivedTextBuffer.value.isNotEmpty()) {
+                    _receivedTextBuffer.value = _receivedTextBuffer.value.dropLast(1)
+                }
+                return true
+            }
+            "\n" -> {
+                return true
+            }
+            else -> {
+                _receivedTextBuffer.value += text
+                return true
+            }
+        }
+    }
+
     private val commandDispatcher = TvCommandDispatcher(
         context = app,
         appRepo = appRepo,
         historyTracker = historyTracker,
-        eventStore = eventStore
+        eventStore = eventStore,
+        onNavigateHome = {
+            navigateToHome()
+            true
+        },
+        onTextReceived = { text ->
+            handleReceivedText(text)
+        }
     )
 
     private val _homeNavigationTrigger = MutableStateFlow(0)

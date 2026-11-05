@@ -90,6 +90,15 @@ class NexusBackupManagerTest {
     }
 
     @Test
+    fun testRestoreRejectsFutureVersion() {
+        val manager = NexusBackupManager()
+        val futureJson = """{"version": 99, "themePresetId": "obsidian"}"""
+        val result = manager.restoreBackupJson(futureJson, currentSupportedVersion = 2)
+        assertTrue("Future version must be rejected", result is RestoreResult.Failure)
+        assertTrue((result as RestoreResult.Failure).reason.contains("Unsupported future backup version"))
+    }
+
+    @Test
     fun testWallpaperReferenceSafety() {
         val manager = NexusBackupManager()
 
