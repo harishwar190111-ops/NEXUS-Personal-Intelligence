@@ -9,6 +9,8 @@ import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.nexus.personalintelligence.core.common.backup.NexusBackupManager
+import com.nexus.personalintelligence.core.common.profile.UserProfileStore
 import com.nexus.personalintelligence.core.common.ui.BackgroundSpec
 import com.nexus.personalintelligence.core.common.ui.BackgroundType
 import com.nexus.personalintelligence.core.common.ui.CustomTheme
@@ -43,6 +45,8 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     private val prefsRepo = TvPrefsRepository(app)
     val eventStore = NexusEventStore()
     val historyTracker = CommandHistoryTracker()
+    val profileStore = UserProfileStore(defaultProfileName = "Main Living Room")
+    val backupManager = NexusBackupManager()
     val networkManager = TvNetworkManager()
     val screensaverManager = TvScreensaverManager()
     private val commandDispatcher = TvCommandDispatcher(

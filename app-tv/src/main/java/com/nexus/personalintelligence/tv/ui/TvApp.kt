@@ -204,6 +204,7 @@ fun NexusTvApp(vm: TvViewModel, startedAsHome: Boolean) {
                         use24Hour = p.use24Hour,
                         launcherMode = launcherMode,
                         pairedPhoneCount = pairedDevices.size,
+                        activeProfileName = vm.profileStore.getActiveProfile().name,
                         onUse24Hour = { vm.setUse24Hour(it) },
                         onLauncherMode = { vm.setLauncherMode(it) },
                         onStartScreensaver = { vm.startScreensaver() },

@@ -38,6 +38,7 @@ fun QuickSettingsDialog(
     use24Hour: Boolean,
     launcherMode: Boolean,
     pairedPhoneCount: Int,
+    activeProfileName: String = "Default",
     onUse24Hour: (Boolean) -> Unit,
     onLauncherMode: (Boolean) -> Unit,
     onStartScreensaver: () -> Unit,
@@ -148,6 +149,16 @@ fun QuickSettingsDialog(
                         if (pairedPhoneCount > 0) "$pairedPhoneCount paired" else "None",
                         if (pairedPhoneCount > 0) StatusKind.Implemented else StatusKind.Alert
                     )
+                }
+
+                // Active Profile
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Active Profile", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    StatusChip(activeProfileName, StatusKind.Implemented)
                 }
 
                 Spacer(Modifier.height(4.dp))
