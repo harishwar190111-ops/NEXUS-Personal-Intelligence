@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.nexus.personalintelligence.core.common.ui.FocusStyle
+import com.nexus.personalintelligence.core.common.ui.GlassPanel
 import com.nexus.personalintelligence.core.common.ui.LocalNexusAccent
 import com.nexus.personalintelligence.core.common.ui.LocalNexusStyle
 import com.nexus.personalintelligence.core.common.ui.NexusColors
@@ -254,6 +255,161 @@ private fun KeyButton(text: String, onClick: () -> Unit, modifier: Modifier = Mo
         contentAlignment = Alignment.Center,
     ) {
         Text(text, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = if (focused) Color.White else NexusColors.TextPrimary, maxLines = 1)
+    }
+}
+
+class TvEditableFieldState(
+    initialText: String = "",
+    val isInitiallyMasked: Boolean = false,
+    val onEnter: (() -> Unit)? = null
+) {
+    var text by mutableStateOf(initialText)
+    var cursorPosition by mutableStateOf(initialText.length)
+    var isMasked by mutableStateOf(isInitiallyMasked)
+
+    fun insert(newChars: String): Boolean {
+        if (newChars.isEmpty()) return false
+        val safeCursor = cursorPosition.coerceIn(0, text.length)
+        val before = text.substring(0, safeCursor)
+        val after = text.substring(safeCursor)
+        text = before + newChars + after
+        cursorPosition = safeCursor + newChars.length
+        return true
+    }
+
+    fun backspace(): Boolean {
+        val safeCursor = cursorPosition.coerceIn(0, text.length)
+        if (safeCursor > 0) {
+            val before = text.substring(0, safeCursor - 1)
+            val after = text.substring(safeCursor)
+            text = before + after
+            cursorPosition = safeCursor - 1
+            return true
+        }
+        return false
+    }
+
+    fun moveCursorLeft(): Boolean {
+        if (cursorPosition > 0) {
+            cursorPosition--
+            return true
+        }
+        return false
+    }
+
+    fun moveCursorRight(): Boolean {
+        if (cursorPosition < text.length) {
+            cursorPosition++
+            return true
+        }
+        return false
+    }
+
+    fun clear() {
+        text = ""
+        cursorPosition = 0
+    }
+
+    fun toggleMasked() {
+        isMasked = !isMasked
+    }
+
+    fun getDisplayText(): String {
+        return if (isMasked) "•".repeat(text.length) else text
+    }
+
+    fun handleInput(input: String): Boolean {
+        return when (input) {
+            "\b" -> backspace()
+            "\n" -> {
+                onEnter?.invoke()
+                true
+            }
+            else -> insert(input)
+        }
+    }
+}
+
+@Composable
+fun TvInAppTextField(
+    state: TvEditableFieldState,
+    label: String,
+    modifier: Modifier = Modifier,
+    placeholder: String = "(empty)",
+    allowMaskingChoice: Boolean = true,
+    focusRequester: FocusRequester? = null
+) {
+    val accent = LocalNexusAccent.current.color
+    var focused by remember { mutableStateOf(false) }
+
+    GlassPanel(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { focused = it.isFocused }
+            .border(
+                width = if (focused) 2.dp else 1.dp,
+                color = if (focused) accent else Color.White.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(16.dp)
+            )
+    ) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 14.sp,
+                    color = NexusColors.TextSecondary,
+                    fontWeight = FontWeight.Medium
+                )
+                if (allowMaskingChoice) {
+                    TvButton(
+                        text = if (state.isMasked) "👁 Show" else "🔒 Mask",
+                        onClick = { state.toggleMasked() },
+                        horizontalPadding = 12.dp
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            val displayText = state.getDisplayText()
+            val safeCursor = state.cursorPosition.coerceIn(0, displayText.length)
+            val before = displayText.substring(0, safeCursor)
+            val after = displayText.substring(safeCursor)
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (displayText.isEmpty()) {
+                    Text(
+                        text = placeholder,
+                        fontSize = 20.sp,
+                        color = NexusColors.TextMuted
+                    )
+                } else {
+                    Text(
+                        text = before,
+                        fontSize = 20.sp,
+                        color = NexusColors.TextPrimary
+                    )
+                }
+                // Cursor bar
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 1.dp)
+                        .width(2.dp)
+                        .height(22.dp)
+                        .background(accent)
+                )
+                if (displayText.isNotEmpty()) {
+                    Text(
+                        text = after,
+                        fontSize = 20.sp,
+                        color = NexusColors.TextPrimary
+                    )
+                }
+            }
+        }
     }
 }
 

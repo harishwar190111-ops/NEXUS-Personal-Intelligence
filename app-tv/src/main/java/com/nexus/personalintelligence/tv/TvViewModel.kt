@@ -46,16 +46,26 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class TvTextInputCoordinator {
+    var activeFieldState: com.nexus.personalintelligence.tv.ui.TvEditableFieldState? = null
     var activeTextReceiver: ((String) -> Boolean)? = null
 
     private val _receivedTextBuffer = MutableStateFlow("")
     val receivedTextBuffer: StateFlow<String> = _receivedTextBuffer.asStateFlow()
 
+    fun bindFieldState(fieldState: com.nexus.personalintelligence.tv.ui.TvEditableFieldState) {
+        activeFieldState = fieldState
+        activeTextReceiver = { text ->
+            fieldState.handleInput(text)
+        }
+    }
+
     fun bindVisibleInputField(consumer: ((String) -> Boolean)? = null) {
+        activeFieldState = null
         activeTextReceiver = consumer ?: { true }
     }
 
     fun unbindVisibleInputField() {
+        activeFieldState = null
         activeTextReceiver = null
         _receivedTextBuffer.value = ""
     }
@@ -105,6 +115,7 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
 
     val receivedTextBuffer: StateFlow<String> get() = textCoordinator.receivedTextBuffer
 
+    fun bindFieldState(fieldState: com.nexus.personalintelligence.tv.ui.TvEditableFieldState) = textCoordinator.bindFieldState(fieldState)
     fun bindVisibleInputField(consumer: ((String) -> Boolean)? = null) = textCoordinator.bindVisibleInputField(consumer)
     fun unbindVisibleInputField() = textCoordinator.unbindVisibleInputField()
     fun handleReceivedText(text: String): Boolean = textCoordinator.handleReceivedText(text)

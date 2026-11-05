@@ -375,6 +375,9 @@ fun DevicesScreen(
                     GlassButton("Reconnect", onReconnect)
                 }
                 GlassButton("Unpair / Forget", onUnpair)
+                if (connectionState == ConnectionState.AUTH_FAILED || statusMessage?.contains("Re-pairing required") == true) {
+                    GlassButton("Re-pair TV", onUnpair)
+                }
             }
         }
     }

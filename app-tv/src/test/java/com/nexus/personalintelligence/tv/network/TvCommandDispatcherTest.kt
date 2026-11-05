@@ -129,4 +129,53 @@ class TvCommandDispatcherTest {
         assertTrue(homeCalled.get())
         assertEquals("Navigated to HOME", result.message)
     }
+
+    @Test
+    fun testRealDispatcherTextInputBackspaceAndEnterUpdatesFieldState() = runBlocking {
+        var enterSubmitted = false
+        val fieldState = com.nexus.personalintelligence.tv.ui.TvEditableFieldState(
+            initialText = "",
+            onEnter = { enterSubmitted = true }
+        )
+        val coordinator = com.nexus.personalintelligence.tv.TvTextInputCoordinator()
+        coordinator.bindFieldState(fieldState)
+
+        val dispatcher = TvCommandDispatcher(
+            context = dummyContext,
+            onTextReceived = { text -> coordinator.handleReceivedText(text) }
+        )
+
+        // 1. Send TEXT_INPUT
+        val textResult = dispatcher.dispatch(RemoteCommand(type = RemoteCommandType.TEXT_INPUT, text = "NexusSearch"))
+        assertTrue(textResult.success)
+        assertEquals("NexusSearch", fieldState.text)
+        assertEquals(11, fieldState.cursorPosition)
+        assertEquals("Text input delivered", textResult.message)
+
+        // 2. Send BACKSPACE
+        val bsResult = dispatcher.dispatch(RemoteCommand(type = RemoteCommandType.BACKSPACE))
+        assertTrue(bsResult.success)
+        assertEquals("NexusSearc", fieldState.text)
+        assertEquals(10, fieldState.cursorPosition)
+        assertEquals("Backspace delivered", bsResult.message)
+
+        // 3. Send ENTER
+        val enterResult = dispatcher.dispatch(RemoteCommand(type = RemoteCommandType.ENTER))
+        assertTrue(enterResult.success)
+        assertTrue("ENTER must invoke onEnter action on fieldState", enterSubmitted)
+        assertEquals("Enter delivered", enterResult.message)
+
+        // 4. Test masking choice on field state
+        assertFalse(fieldState.isMasked)
+        assertEquals("NexusSearc", fieldState.getDisplayText())
+        fieldState.toggleMasked()
+        assertTrue(fieldState.isMasked)
+        assertEquals("••••••••••", fieldState.getDisplayText())
+
+        // 5. When unbind is called, dispatcher text commands fail honestly
+        coordinator.unbindVisibleInputField()
+        val failResult = dispatcher.dispatch(RemoteCommand(type = RemoteCommandType.TEXT_INPUT, text = "More"))
+        assertFalse("Without active text receiver, TEXT_INPUT must fail", failResult.success)
+        assertEquals("No active text receiver available on TV", failResult.message)
+    }
 }

@@ -146,6 +146,37 @@ fun SettingsScreen(
             }
         }
 
+        SectionTitle("Remote Control Outside NEXUS TV (Accessibility)")
+        val isA11yEnabled = remember { com.nexus.personalintelligence.tv.accessibility.NexusAccessibilityService.isEnabled(context) }
+        GlassPanel(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("System-Wide Remote Navigation", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    if (isA11yEnabled) {
+                        StatusChip("Enabled", StatusKind.Implemented)
+                    } else {
+                        StatusChip("Disabled", StatusKind.Alert)
+                    }
+                }
+                Text(
+                    text = "Status: ${if (isA11yEnabled) "Enabled (Active)" else "Disabled (In-app only)"}\n" +
+                        "Allows your phone remote to navigate outside NEXUS TV into third-party apps.\n" +
+                        "Privacy notice: NEXUS does not read or collect passwords or screen contents. This service is never turned on automatically.",
+                    fontSize = 13.sp,
+                    color = NexusColors.TextSecondary
+                )
+                TvButton("Open Android Accessibility Settings", onClick = {
+                    runCatching {
+                        context.startActivity(com.nexus.personalintelligence.tv.accessibility.NexusAccessibilityService.createSettingsIntent())
+                    }
+                })
+            }
+        }
+
         SectionTitle("About")
         Text(
             "NEXUS TV $versionName on Android ${Build.VERSION.RELEASE}. $appCount launchable apps found. " +

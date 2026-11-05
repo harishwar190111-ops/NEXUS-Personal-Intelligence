@@ -74,7 +74,9 @@ fun NexusMobileApp(vm: MobileViewModel) {
                                 Tab.Remote -> RemoteScreen(
                                     pairedTv = s.pairedTv,
                                     connectionState = connectionState,
+                                    statusMessage = remoteStatusMessage,
                                     onSendCommand = { vm.sendRemoteCommand(it) },
+                                    onReconnect = { vm.reconnectTv() },
                                     onNavigateToDevices = { tabName = Tab.Devices.name }
                                 )
                                 Tab.Assistant -> AssistantScreen(s)

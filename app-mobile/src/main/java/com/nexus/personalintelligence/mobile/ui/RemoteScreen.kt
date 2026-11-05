@@ -62,7 +62,9 @@ enum class RemoteMode(val label: String) {
 fun RemoteScreen(
     pairedTv: PairedTvInfo,
     connectionState: ConnectionState,
+    statusMessage: String? = null,
     onSendCommand: (RemoteCommand) -> Unit,
+    onReconnect: () -> Unit = {},
     onNavigateToDevices: () -> Unit
 ) {
     var mode by remember { mutableStateOf(RemoteMode.Dpad) }
@@ -96,7 +98,11 @@ fun RemoteScreen(
             if (isConnected) {
                 StatusChip("Connected", StatusKind.Implemented)
             } else {
-                StatusChip("Disconnected", StatusKind.Alert, modifier = Modifier.clickable { onNavigateToDevices() })
+                StatusChip(
+                    text = if (connectionState == ConnectionState.CONNECTING || connectionState == ConnectionState.RECONNECTING) "Connecting..." else "Disconnected",
+                    kind = StatusKind.Alert,
+                    modifier = Modifier.clickable { onNavigateToDevices() }
+                )
             }
         }
 
@@ -132,9 +138,23 @@ fun RemoteScreen(
         if (!isConnected) {
             GlassPanel(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("TV is disconnected", fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                    Text("Connect to your TV in Devices to send remote commands.", fontSize = 13.sp, color = NexusColors.TextMuted, textAlign = TextAlign.Center)
-                    GlassButton("Go to Devices", onNavigateToDevices)
+                    Text(
+                        text = if (connectionState == ConnectionState.NOT_PAIRED) "TV Not Paired" else "TV is disconnected",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = statusMessage ?: if (pairedTv.isPaired) "Could not connect to ${pairedTv.host}:${pairedTv.port}." else "Pair with your TV in Devices to send remote commands.",
+                        fontSize = 13.sp,
+                        color = NexusColors.TextMuted,
+                        textAlign = TextAlign.Center
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (pairedTv.isPaired) {
+                            GlassButton("Reconnect", onReconnect)
+                        }
+                        GlassButton("Go to Devices", onNavigateToDevices)
+                    }
                 }
             }
         }
@@ -157,7 +177,8 @@ private fun DpadView(onSendCommand: (RemoteCommand) -> Unit, enabled: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 80.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -269,7 +290,29 @@ private fun DpadView(onSendCommand: (RemoteCommand) -> Unit, enabled: Boolean) {
             }
         }
 
-        // Media & Volume row
+        // Media transport row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            ControlButton("⏮ PREV", NexusColors.TextSecondary, enabled) {
+                onSendCommand(RemoteCommand(type = RemoteCommandType.PREVIOUS))
+            }
+            ControlButton("⏪ REW", NexusColors.TextSecondary, enabled) {
+                onSendCommand(RemoteCommand(type = RemoteCommandType.REWIND))
+            }
+            ControlButton("⏯ PLAY", accent, enabled) {
+                onSendCommand(RemoteCommand(type = RemoteCommandType.PLAY_PAUSE))
+            }
+            ControlButton("⏩ FWD", NexusColors.TextSecondary, enabled) {
+                onSendCommand(RemoteCommand(type = RemoteCommandType.FAST_FORWARD))
+            }
+            ControlButton("⏭ NEXT", NexusColors.TextSecondary, enabled) {
+                onSendCommand(RemoteCommand(type = RemoteCommandType.NEXT))
+            }
+        }
+
+        // Volume row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -282,9 +325,6 @@ private fun DpadView(onSendCommand: (RemoteCommand) -> Unit, enabled: Boolean) {
             }
             ControlButton("VOL +", NexusColors.TextSecondary, enabled) {
                 onSendCommand(RemoteCommand(type = RemoteCommandType.VOLUME_UP))
-            }
-            ControlButton("⏯ PLAY", accent, enabled) {
-                onSendCommand(RemoteCommand(type = RemoteCommandType.PLAY_PAUSE))
             }
         }
     }
@@ -397,7 +437,8 @@ private fun RemoteKeyboardView(onSendCommand: (RemoteCommand) -> Unit, enabled: 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Live text input sending directly to TV
@@ -408,11 +449,27 @@ private fun RemoteKeyboardView(onSendCommand: (RemoteCommand) -> Unit, enabled: 
         ) {
             OutlinedTextField(
                 value = typedText,
-                onValueChange = {
-                    typedText = it
-                    if (it.isNotEmpty() && enabled) {
-                        onSendCommand(RemoteCommand(type = RemoteCommandType.TEXT_INPUT, text = it.last().toString()))
+                onValueChange = { newText ->
+                    if (enabled) {
+                        if (newText.length > typedText.length) {
+                            val added = if (newText.startsWith(typedText)) {
+                                newText.substring(typedText.length)
+                            } else {
+                                val prefixLen = newText.commonPrefixWith(typedText).length
+                                val suffixLen = newText.substring(prefixLen).commonSuffixWith(typedText.substring(prefixLen)).length
+                                newText.substring(prefixLen, newText.length - suffixLen)
+                            }
+                            if (added.isNotEmpty()) {
+                                onSendCommand(RemoteCommand(type = RemoteCommandType.TEXT_INPUT, text = added))
+                            }
+                        } else if (newText.length < typedText.length) {
+                            val deleteCount = typedText.length - newText.length
+                            repeat(deleteCount) {
+                                onSendCommand(RemoteCommand(type = RemoteCommandType.BACKSPACE))
+                            }
+                        }
                     }
+                    typedText = newText
                 },
                 modifier = Modifier.weight(1f),
                 label = { Text("Type here to send text to TV") },
@@ -420,6 +477,12 @@ private fun RemoteKeyboardView(onSendCommand: (RemoteCommand) -> Unit, enabled: 
                 singleLine = true,
                 colors = nexusFieldColors()
             )
+            GlassButton("Send", {
+                if (typedText.isNotEmpty() && enabled) {
+                    onSendCommand(RemoteCommand(type = RemoteCommandType.TEXT_INPUT, text = typedText))
+                    typedText = ""
+                }
+            })
             GlassButton("Clear", { typedText = "" })
         }
 

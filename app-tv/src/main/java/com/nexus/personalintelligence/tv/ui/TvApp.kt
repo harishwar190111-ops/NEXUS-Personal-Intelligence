@@ -100,6 +100,8 @@ fun NexusTvApp(vm: TvViewModel, startedAsHome: Boolean) {
                             hint = "Type the web address, for example example.com",
                             initial = "",
                             extraKeys = listOf(".", "/", ":", "-", "_", ".com"),
+                            onBindField = { vm.bindFieldState(it) },
+                            onUnbindField = { vm.unbindVisibleInputField() },
                             onSubmit = { raw ->
                                 val url = WebLogic.normalizeUrl(raw)
                                 if (url == null) vm.showMessage("That doesn't look like a web address.") else entry = EntryRequest.NewName(url)
@@ -111,6 +113,8 @@ fun NexusTvApp(vm: TvViewModel, startedAsHome: Boolean) {
                             hint = "A short name shown in NEXUS",
                             initial = WebLogic.defaultName(request.url),
                             extraKeys = emptyList(),
+                            onBindField = { vm.bindFieldState(it) },
+                            onUnbindField = { vm.unbindVisibleInputField() },
                             onSubmit = { name ->
                                 vm.addWebsite(name, request.url)
                                 entry = null
@@ -122,6 +126,8 @@ fun NexusTvApp(vm: TvViewModel, startedAsHome: Boolean) {
                             hint = request.url,
                             initial = request.current,
                             extraKeys = emptyList(),
+                            onBindField = { vm.bindFieldState(it) },
+                            onUnbindField = { vm.unbindVisibleInputField() },
                             onSubmit = { name ->
                                 vm.renameWebsite(request.url, name)
                                 entry = null

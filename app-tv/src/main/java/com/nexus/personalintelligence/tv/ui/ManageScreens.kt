@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,36 +60,40 @@ fun TextEntryScreen(
     hint: String,
     initial: String,
     extraKeys: List<String>,
+    onBindField: ((TvEditableFieldState) -> Unit)? = null,
+    onUnbindField: (() -> Unit)? = null,
     onSubmit: (String) -> Unit,
     onCancel: () -> Unit,
 ) {
-    var text by remember(title, initial) { mutableStateOf(initial) }
+    val fieldState = remember(title, initial) {
+        TvEditableFieldState(initialText = initial, onEnter = { onSubmit(initial) })
+    }
+    DisposableEffect(fieldState) {
+        onBindField?.invoke(fieldState)
+        onDispose { onUnbindField?.invoke() }
+    }
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         delay(150)
         runCatching { firstFocus.requestFocus() }
     }
     ScreenFrame(title, hint, scroll = false) {
-        GlassPanel(Modifier.fillMaxWidth()) {
-            Text(
-                if (text.isEmpty()) "(empty)" else text + "|",
-                Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                fontSize = 22.sp,
-                color = if (text.isEmpty()) NexusColors.TextMuted else NexusColors.TextPrimary,
-                maxLines = 1,
-            )
-        }
+        TvInAppTextField(
+            state = fieldState,
+            label = title,
+            allowMaskingChoice = true
+        )
         OnScreenKeyboard(
-            onKey = { text += it },
-            onBackspace = { text = text.dropLast(1) },
-            onSpace = { text += " " },
-            onClear = { text = "" },
+            onKey = { fieldState.insert(it) },
+            onBackspace = { fieldState.backspace() },
+            onSpace = { fieldState.insert(" ") },
+            onClear = { fieldState.clear() },
             modifier = Modifier.fillMaxWidth(),
             firstFocus = firstFocus,
             extraKeys = extraKeys,
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally)) {
-            TvButton("Done", onClick = { onSubmit(text) })
+            TvButton("Done", onClick = { onSubmit(fieldState.text) })
             TvButton("Cancel", onClick = onCancel)
         }
     }
