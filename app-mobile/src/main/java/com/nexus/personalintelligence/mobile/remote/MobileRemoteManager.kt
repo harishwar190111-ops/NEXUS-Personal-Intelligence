@@ -156,7 +156,10 @@ class MobileRemoteManager(
     }
 
     suspend fun connectWithSaved(info: PairedTvInfo): Boolean {
-        if (!info.isPaired) return false
+        if (!info.isPaired) {
+            _statusMessage.value = "No valid paired TV credentials found. Please pair with TV."
+            return false
+        }
         currentHost = info.host
         currentPort = info.port
         myDeviceId = info.deviceId
@@ -189,17 +192,31 @@ class MobileRemoteManager(
             )
             return true
         } else {
-            _statusMessage.value = "Authentication failed: ${auth.message}"
+            val failureDetail = when (auth.status) {
+                com.nexus.personalintelligence.core.remote.HandshakeStatus.UNAUTHORIZED ->
+                    "Pairing rejected (${auth.message}). Token may be revoked or invalid. Re-pairing required."
+                com.nexus.personalintelligence.core.remote.HandshakeStatus.EXPIRED ->
+                    "Session expired on TV. Re-pairing required."
+                else ->
+                    "Authentication failed: ${auth.message}"
+            }
+            _statusMessage.value = failureDetail
             eventStore.addEvent(
                 NexusEvent(
                     title = "Auth Failed",
-                    message = auth.message,
+                    message = failureDetail,
                     severity = EventSeverity.ALERT,
                     category = EventCategory.PAIRING
                 )
             )
             return false
         }
+    }
+
+    suspend fun rePair(): Boolean {
+        unpair()
+        _statusMessage.value = "Previous pairing cleared. Ready to pair again."
+        return true
     }
 
     suspend fun sendCommand(command: RemoteCommand): CommandResult {

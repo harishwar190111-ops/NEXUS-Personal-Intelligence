@@ -43,6 +43,11 @@ class AesGcmPairedDeviceStore(
     private val json = Json { ignoreUnknownKeys = true }
     private val secureRandom = SecureRandom()
 
+    var lastSaveError: String? = null
+        private set
+    var lastLoadError: String? = null
+        private set
+
     companion object {
         private const val GCM_IV_LENGTH_BYTES = 12
         private const val GCM_TAG_LENGTH_BITS = 128
@@ -51,25 +56,30 @@ class AesGcmPairedDeviceStore(
 
     @Synchronized
     override fun saveDevices(devices: List<PairedDevice>) {
-        val key = keyProvider.getOrCreateKey()
-        val jsonText = json.encodeToString(devices)
-        val plaintext = jsonText.toByteArray(StandardCharsets.UTF_8)
+        try {
+            val key = keyProvider.getOrCreateKey()
+            val jsonText = json.encodeToString(devices)
+            val plaintext = jsonText.toByteArray(StandardCharsets.UTF_8)
 
-        val iv = ByteArray(GCM_IV_LENGTH_BYTES)
-        secureRandom.nextBytes(iv)
+            val iv = ByteArray(GCM_IV_LENGTH_BYTES)
+            secureRandom.nextBytes(iv)
 
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
-        val ciphertext = cipher.doFinal(plaintext)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
+            val ciphertext = cipher.doFinal(plaintext)
 
-        // Store [IV (12 bytes)][Ciphertext + GCM Tag]
-        val buffer = ByteBuffer.allocate(iv.size + ciphertext.size)
-        buffer.put(iv)
-        buffer.put(ciphertext)
+            // Store [IV (12 bytes)][Ciphertext + GCM Tag]
+            val buffer = ByteBuffer.allocate(iv.size + ciphertext.size)
+            buffer.put(iv)
+            buffer.put(ciphertext)
 
-        val encoded = Base64.getEncoder().encodeToString(buffer.array())
-        file.parentFile?.mkdirs()
-        file.writeText(encoded)
+            val encoded = Base64.getEncoder().encodeToString(buffer.array())
+            file.parentFile?.mkdirs()
+            file.writeText(encoded)
+            lastSaveError = null
+        } catch (e: Exception) {
+            lastSaveError = "Failed to save paired devices: ${e.message}"
+        }
     }
 
     @Synchronized

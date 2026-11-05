@@ -14,10 +14,15 @@ import com.nexus.personalintelligence.mobile.ai.ProviderSettings
 import com.nexus.personalintelligence.mobile.ai.ProviderType
 import com.nexus.personalintelligence.mobile.ai.ProviderValidator
 import com.nexus.personalintelligence.mobile.security.SecretCipher
+import com.nexus.personalintelligence.mobile.security.SecretCipherEngine
 import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 enum class AssistantLanguage(val id: String, val label: String) {
     English("en", "English"),
@@ -40,35 +45,45 @@ data class PairedTvInfo(
     val isPaired: Boolean get() = sessionToken.isNotBlank() && host.isNotBlank()
 }
 
-object MobileTokenCipher {
-    const val PREFIX = "enc:v1:"
-    private val UUID_REGEX = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+open class MobileTokenCipherEngine(private val cipherEngine: SecretCipherEngine = SecretCipher) {
+    val prefix = "enc:v1:"
+    private val uuidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
     fun encryptToken(rawToken: String): Result<String> {
         if (rawToken.isBlank()) return Result.success("")
         return runCatching {
-            val ciphertext = SecretCipher.encrypt(rawToken)
-            "$PREFIX$ciphertext"
+            val ciphertext = cipherEngine.encrypt(rawToken)
+            "$prefix$ciphertext"
         }
     }
 
     fun decryptToken(storedValue: String): String? {
         if (storedValue.isBlank()) return ""
-        if (storedValue.startsWith(PREFIX)) {
-            val payload = storedValue.removePrefix(PREFIX)
-            return runCatching { SecretCipher.decrypt(payload) }.getOrNull()
+        if (storedValue.startsWith(prefix)) {
+            val payload = storedValue.removePrefix(prefix)
+            return runCatching { cipherEngine.decrypt(payload) }.getOrNull()
         }
         // Legacy unversioned format with iv:ciphertext
-        if (storedValue.contains(":") && !storedValue.startsWith(PREFIX)) {
-            return runCatching { SecretCipher.decrypt(storedValue) }.getOrNull()
+        if (storedValue.contains(":") && !storedValue.startsWith(prefix)) {
+            return runCatching { cipherEngine.decrypt(storedValue) }.getOrNull()
         }
         // Legacy plaintext token: accept only the exact format the TV server actually generates (UUID)
-        if (storedValue.length == 36 && UUID_REGEX.matches(storedValue)) {
+        if (storedValue.length == 36 && uuidRegex.matches(storedValue)) {
             return storedValue
         }
         // Any other unprefixed or corrupt value means unpaired state
         return null
     }
+
+    fun isLegacyFormat(storedValue: String): Boolean {
+        if (storedValue.isBlank() || storedValue.startsWith(prefix)) return false
+        return (storedValue.contains(":") && !storedValue.startsWith(prefix)) ||
+               (storedValue.length == 36 && uuidRegex.matches(storedValue))
+    }
+}
+
+object MobileTokenCipher : MobileTokenCipherEngine(SecretCipher) {
+    const val PREFIX = "enc:v1:"
 }
 
 interface PairedTvStorage {
@@ -85,7 +100,11 @@ data class MobileSettings(
 
 private val Context.mobileStore: DataStore<Preferences> by preferencesDataStore(name = "nexus_mobile_settings")
 
-class MobileSettingsRepository(private val context: Context) : PairedTvStorage {
+class MobileSettingsRepository(
+    private val context: Context,
+    private val tokenCipher: MobileTokenCipherEngine = MobileTokenCipher,
+    private val ioScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+) : PairedTvStorage {
     private object Keys {
         val NAME = stringPreferencesKey("display_name")
         val LANGUAGE = stringPreferencesKey("language")
@@ -106,9 +125,23 @@ class MobileSettingsRepository(private val context: Context) : PairedTvStorage {
         .map { p ->
             val type = ProviderType.fromId(p[Keys.PROVIDER])
             val storedToken = p[Keys.TV_SESSION_TOKEN].orEmpty()
-            val decryptedToken = MobileTokenCipher.decryptToken(storedToken)
+            val decryptedToken = tokenCipher.decryptToken(storedToken)
             val effectiveToken = decryptedToken ?: ""
             val isPaired = effectiveToken.isNotBlank() && !p[Keys.TV_HOST].isNullOrBlank()
+
+            if (storedToken.isNotBlank() && tokenCipher.isLegacyFormat(storedToken) && effectiveToken.isNotBlank()) {
+                // Re-encrypt legacy plaintext tokens on read
+                ioScope.launch {
+                    val reEncrypted = tokenCipher.encryptToken(effectiveToken).getOrNull()
+                    if (reEncrypted != null) {
+                        context.mobileStore.edit { prefs ->
+                            if (prefs[Keys.TV_SESSION_TOKEN] == storedToken) {
+                                prefs[Keys.TV_SESSION_TOKEN] = reEncrypted
+                            }
+                        }
+                    }
+                }
+            }
 
             MobileSettings(
                 displayName = p[Keys.NAME].orEmpty(),

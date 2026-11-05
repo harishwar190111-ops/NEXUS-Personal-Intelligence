@@ -114,4 +114,31 @@ class AesGcmPairedDeviceStoreTest {
             storeDifferentKey.loadDevices()
         }
     }
+
+    @Test
+    fun testSaveDevicesHandlesIoExceptionWithoutThrowing() {
+        val readOnlyDir = File(tempFolder.root, "readonly_dir")
+        readOnlyDir.mkdirs()
+        readOnlyDir.setReadOnly()
+        val impossibleFile = File(readOnlyDir, "cannot_write.enc")
+        val store = AesGcmPairedDeviceStore(impossibleFile, JvmDeviceKeyProvider())
+
+        store.saveDevices(listOf(PairedDevice(deviceId = "d1", deviceName = "D1", sessionToken = "tok")))
+        assertTrue("Store must report lastSaveError when write fails", store.lastSaveError != null)
+    }
+
+    @Test
+    fun testSaveDevicesHandlesKeystoreExceptionWithoutThrowing() {
+        val failingProvider = object : DeviceKeyProvider {
+            override fun getOrCreateKey(): javax.crypto.SecretKey {
+                throw java.security.KeyStoreException("Android Keystore unavailable or locked")
+            }
+        }
+        val file = File(tempFolder.root, "keystore_fail.enc")
+        val store = AesGcmPairedDeviceStore(file, failingProvider)
+
+        store.saveDevices(listOf(PairedDevice(deviceId = "d1", deviceName = "D1", sessionToken = "tok")))
+        assertTrue("Store must report lastSaveError when Keystore fails", store.lastSaveError != null)
+        assertTrue(store.lastSaveError!!.contains("Android Keystore unavailable"))
+    }
 }

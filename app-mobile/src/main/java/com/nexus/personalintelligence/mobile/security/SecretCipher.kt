@@ -9,15 +9,14 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Encrypts secrets (API keys, session tokens) with an AES-GCM key that never leaves the Android Keystore. */
-object SecretCipher {
+interface SecretKeyProvider {
+    fun getKey(): SecretKey
+}
+
+object AndroidKeyStoreSecretKeyProvider : SecretKeyProvider {
     private const val ALIAS = "nexus_provider_key"
-    private const val TRANSFORM = "AES/GCM/NoPadding"
 
-    var testSecretKey: SecretKey? = null
-
-    private fun key(): SecretKey {
-        testSecretKey?.let { return it }
+    override fun getKey(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(ALIAS, null) as? SecretKey)?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
@@ -30,10 +29,15 @@ object SecretCipher {
         )
         return generator.generateKey()
     }
+}
+
+/** Encrypts secrets (API keys, session tokens) with an AES-GCM key. */
+open class SecretCipherEngine(private val keyProvider: SecretKeyProvider = AndroidKeyStoreSecretKeyProvider) {
+    private val transform = "AES/GCM/NoPadding"
 
     fun encrypt(plain: String): String {
-        val cipher = Cipher.getInstance(TRANSFORM)
-        cipher.init(Cipher.ENCRYPT_MODE, key())
+        val cipher = Cipher.getInstance(transform)
+        cipher.init(Cipher.ENCRYPT_MODE, keyProvider.getKey())
         val bytes = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
         val encoder = Base64.getEncoder()
         return encoder.encodeToString(cipher.iv) + ":" + encoder.encodeToString(bytes)
@@ -46,11 +50,13 @@ object SecretCipher {
             val decoder = Base64.getDecoder()
             val iv = decoder.decode(parts[0])
             val data = decoder.decode(parts[1])
-            val cipher = Cipher.getInstance(TRANSFORM)
-            cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, iv))
+            val cipher = Cipher.getInstance(transform)
+            cipher.init(Cipher.DECRYPT_MODE, keyProvider.getKey(), GCMParameterSpec(128, iv))
             String(cipher.doFinal(data), Charsets.UTF_8)
         }
     } catch (_: Exception) {
         null
     }
 }
+
+object SecretCipher : SecretCipherEngine(AndroidKeyStoreSecretKeyProvider)

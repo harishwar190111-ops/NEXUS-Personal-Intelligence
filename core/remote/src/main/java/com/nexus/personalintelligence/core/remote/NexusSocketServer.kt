@@ -31,6 +31,21 @@ class NexusSocketServer(
     val pairedDevices = ConcurrentHashMap<String, PairedDevice>()
     var lastStoreLoadError: String? = null
         private set
+    var lastStoreSaveError: String? = null
+        private set
+
+    fun persistPairedDevices() {
+        try {
+            pairedDeviceStore?.saveDevices(pairedDevices.values.toList())
+            if (pairedDeviceStore is AesGcmPairedDeviceStore) {
+                lastStoreSaveError = (pairedDeviceStore as AesGcmPairedDeviceStore).lastSaveError
+            } else {
+                lastStoreSaveError = null
+            }
+        } catch (e: Exception) {
+            lastStoreSaveError = "Failed to save paired devices to store: ${e.message}"
+        }
+    }
 
     init {
         try {
@@ -242,7 +257,7 @@ class NexusSocketServer(
                                     lastSeenAt = System.currentTimeMillis()
                                 )
                                 pairedDevices[verify.clientDeviceId] = device
-                                pairedDeviceStore?.saveDevices(pairedDevices.values.toList())
+                                persistPairedDevices()
                                 pendingPairings.remove(verify.clientDeviceId)
                                 currentSessionToken = token
                                 currentDeviceId = verify.clientDeviceId
@@ -370,14 +385,14 @@ class NexusSocketServer(
     fun revokeDevice(deviceId: String): Boolean {
         val dev = pairedDevices[deviceId] ?: return false
         dev.isRevoked = true
-        pairedDeviceStore?.saveDevices(pairedDevices.values.toList())
+        persistPairedDevices()
         return true
     }
 
     fun removeDevice(deviceId: String): Boolean {
         val ok = pairedDevices.remove(deviceId) != null
         if (ok) {
-            pairedDeviceStore?.saveDevices(pairedDevices.values.toList())
+            persistPairedDevices()
         }
         return ok
     }
