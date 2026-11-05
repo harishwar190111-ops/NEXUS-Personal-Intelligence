@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NEXUS TV</string>
-    <string name="accessibility_service_description">Enables the NEXUS phone remote to control navigation outside the NEXUS launcher. NEXUS does not read or collect passwords or screen contents.</string>
 </resources>
