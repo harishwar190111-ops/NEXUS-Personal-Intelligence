@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
+import com.nexus.personalintelligence.core.common.device.DeviceMetricFormatter
 
 /** Real values read from this device. Useful as evidence for the OS-feasibility research (SoC, board, RAM). */
 object DeviceInfo {
@@ -18,7 +19,6 @@ object DeviceInfo {
         } catch (e: Exception) {
             -1L
         }
-        fun mb(bytes: Long): String = if (bytes < 0) "unknown" else "${bytes / (1024 * 1024)} MB"
         return listOf(
             "Manufacturer" to Build.MANUFACTURER,
             "Model" to Build.MODEL,
@@ -31,11 +31,12 @@ object DeviceInfo {
             "Security patch" to (Build.VERSION.SECURITY_PATCH ?: "unknown"),
             "Build" to Build.DISPLAY,
             "CPU ABIs" to Build.SUPPORTED_ABIS.joinToString(", "),
-            "RAM total" to mb(mem.totalMem),
-            "RAM available now" to mb(mem.availMem),
+            "RAM total" to DeviceMetricFormatter.formatBytes(mem.totalMem),
+            "RAM available now" to DeviceMetricFormatter.formatBytes(mem.availMem),
+            "RAM summary" to DeviceMetricFormatter.formatMemorySummary(mem.availMem, mem.totalMem),
             "Low-RAM device flag" to (am?.isLowRamDevice ?: false).toString(),
             "Display" to "${dm.widthPixels} x ${dm.heightPixels} px, ${dm.densityDpi} dpi",
-            "Free storage" to mb(free),
+            "Free storage" to DeviceMetricFormatter.formatStorageSummary(free),
         )
     }
 }
