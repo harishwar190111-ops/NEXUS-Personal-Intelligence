@@ -1,6 +1,8 @@
 package com.nexus.personalintelligence.core.ai
 
 import com.nexus.personalintelligence.core.common.NexusResult
+import com.nexus.personalintelligence.core.remote.RemoteCommand
+import com.nexus.personalintelligence.core.remote.RemoteCommandType
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -54,14 +56,49 @@ class NexusAiIntentParser {
         if (trimmed.contains("netflix") || trimmed.contains("நெட்ஃபிக்ஸ்")) {
             return RecognizedAiIntent(IntentAction.OPEN_APP, target = "Netflix", parameter = "com.netflix.ninja", originalText = rawText, language = lang)
         }
+        if (trimmed.contains("home") || trimmed.contains("முகப்பு")) {
+            return RecognizedAiIntent(IntentAction.NAVIGATE, target = "home", parameter = "HOME", originalText = rawText, language = lang)
+        }
+        if (trimmed.contains("back") || trimmed.contains("பின்னால்")) {
+            return RecognizedAiIntent(IntentAction.NAVIGATE, target = "back", parameter = "BACK", originalText = rawText, language = lang)
+        }
+        if (trimmed.contains("settings") || trimmed.contains("அமைப்புகள்")) {
+            return RecognizedAiIntent(IntentAction.NAVIGATE, target = "settings", parameter = "SETTINGS", originalText = rawText, language = lang)
+        }
         if (trimmed.contains("theme") || trimmed.contains("தீம்")) {
             val theme = if (trimmed.contains("aurora")) "Aurora" else "Liquid Glass"
             return RecognizedAiIntent(IntentAction.CHANGE_THEME, parameter = theme, originalText = rawText, language = lang)
         }
-        if (trimmed.contains("volume") || trimmed.contains("ethu") || trimmed.contains("சத்தம்")) {
-            return RecognizedAiIntent(IntentAction.VOLUME_CONTROL, parameter = "UP", originalText = rawText, language = lang)
+        if (trimmed.contains("volume") || trimmed.contains("ethu") || trimmed.contains("சத்த")) {
+            val param = if (trimmed.contains("down") || trimmed.contains("kura") || trimmed.contains("குறை")) "DOWN" else "UP"
+            return RecognizedAiIntent(IntentAction.VOLUME_CONTROL, parameter = param, originalText = rawText, language = lang)
+        }
+        if (trimmed.contains("mute") || trimmed.contains("அமைதி")) {
+            return RecognizedAiIntent(IntentAction.VOLUME_CONTROL, parameter = "MUTE", originalText = rawText, language = lang)
+        }
+        if (trimmed.contains("play") || trimmed.contains("pause") || trimmed.contains("போடு") || trimmed.contains("நிறுத்து")) {
+            return RecognizedAiIntent(IntentAction.MEDIA_CONTROL, parameter = "PLAY_PAUSE", originalText = rawText, language = lang)
         }
         return RecognizedAiIntent(IntentAction.UNKNOWN, originalText = rawText, language = lang, confidence = 0.5f)
+    }
+
+    fun toRemoteCommand(intent: RecognizedAiIntent): RemoteCommand? {
+        return when (intent.action) {
+            IntentAction.OPEN_APP -> RemoteCommand(type = RemoteCommandType.LAUNCH_APP, packageName = intent.parameter)
+            IntentAction.NAVIGATE -> when (intent.parameter) {
+                "BACK" -> RemoteCommand(type = RemoteCommandType.BACK)
+                "SETTINGS" -> RemoteCommand(type = RemoteCommandType.SETTINGS)
+                else -> RemoteCommand(type = RemoteCommandType.HOME)
+            }
+            IntentAction.VOLUME_CONTROL -> when (intent.parameter) {
+                "DOWN" -> RemoteCommand(type = RemoteCommandType.VOLUME_DOWN)
+                "MUTE" -> RemoteCommand(type = RemoteCommandType.MUTE)
+                else -> RemoteCommand(type = RemoteCommandType.VOLUME_UP)
+            }
+            IntentAction.MEDIA_CONTROL -> RemoteCommand(type = RemoteCommandType.PLAY_PAUSE)
+            IntentAction.SEARCH_WEBSITE -> RemoteCommand(type = RemoteCommandType.OPEN_URL, targetUrl = intent.parameter)
+            else -> null
+        }
     }
 }
 
@@ -73,6 +110,30 @@ class NexusAiEngine(
     private val intentParser: NexusAiIntentParser = NexusAiIntentParser()
 ) {
     fun parseDeterministicIntent(text: String): RecognizedAiIntent = intentParser.parse(text)
+
+    fun toRemoteCommand(intent: RecognizedAiIntent): RemoteCommand? = intentParser.toRemoteCommand(intent)
+
+    fun redactSecrets(message: String, apiKey: String): String {
+        var clean = message
+        if (apiKey.isNotBlank()) {
+            clean = clean.replace(apiKey, "[REDACTED]")
+        }
+        clean = clean.replace(Regex("(?i)(key|token|secret|password)=([^&\\s\"']+)", RegexOption.IGNORE_CASE), "$1=[REDACTED]")
+        clean = clean.replace(Regex("(?i)Bearer\\s+([A-Za-z0-9_.-]+)"), "Bearer [REDACTED]")
+        return clean
+    }
+
+    suspend fun testConnection(config: AiProviderConfig): NexusResult<String> {
+        if (config.apiKey.isBlank()) {
+            return NexusResult.Error("API key is blank. Please enter a valid API key.")
+        }
+        val testPrompt = "ping"
+        val queryResult = queryProvider(testPrompt, config)
+        return when (queryResult) {
+            is NexusResult.Success -> NexusResult.Success("Connection successful! Provider returned valid response.")
+            is NexusResult.Error -> NexusResult.Error(redactSecrets(queryResult.message, config.apiKey))
+        }
+    }
 
     suspend fun queryProvider(prompt: String, config: AiProviderConfig): NexusResult<String> {
         if (!config.isEnabled || config.apiKey.isBlank()) {
@@ -101,9 +162,9 @@ class NexusAiEngine(
                     val resp = client.newCall(req).execute()
                     val body = resp.body?.string() ?: ""
                     if (resp.isSuccessful) {
-                        NexusResult.Success("Response received: $body")
+                        NexusResult.Success("Response received: ${redactSecrets(body, config.apiKey)}")
                     } else {
-                        NexusResult.Error("API error (${resp.code}): $body")
+                        NexusResult.Error(redactSecrets("API error (${resp.code}): $body", config.apiKey))
                     }
                 }
                 AiProviderType.GEMINI -> {
@@ -121,14 +182,14 @@ class NexusAiEngine(
                     val resp = client.newCall(req).execute()
                     val body = resp.body?.string() ?: ""
                     if (resp.isSuccessful) {
-                        NexusResult.Success("Gemini response: $body")
+                        NexusResult.Success("Gemini response: ${redactSecrets(body, config.apiKey)}")
                     } else {
-                        NexusResult.Error("Gemini error (${resp.code}): $body")
+                        NexusResult.Error(redactSecrets("Gemini error (${resp.code}): $body", config.apiKey))
                     }
                 }
             }
         } catch (e: Exception) {
-            NexusResult.Error("AI Provider error: ${e.message}", e)
+            NexusResult.Error(redactSecrets("AI Provider error: ${e.message}", config.apiKey), e)
         }
     }
 }

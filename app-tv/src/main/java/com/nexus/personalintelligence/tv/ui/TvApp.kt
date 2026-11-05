@@ -43,6 +43,8 @@ fun NexusTvApp(vm: TvViewModel, startedAsHome: Boolean) {
     val launcherMode by vm.launcherMode.collectAsStateWithLifecycle()
     val securityGateRequest by vm.securityGateRequest.collectAsStateWithLifecycle()
     val pairedDevices by vm.pairedDevices.collectAsStateWithLifecycle()
+    val isScreensaverActive by vm.isScreensaverActive.collectAsStateWithLifecycle()
+    val isQuickSettingsOpen by vm.isQuickSettingsOpen.collectAsStateWithLifecycle()
     var screen by remember { mutableStateOf(TvScreen.Home) }
     var entry by remember { mutableStateOf<EntryRequest?>(null) }
 
@@ -124,9 +126,11 @@ fun NexusTvApp(vm: TvViewModel, startedAsHome: Boolean) {
                         TvScreen.Home -> HomeScreen(
                             apps = a,
                             prefs = p,
+                            pairedPhoneCount = pairedDevices.size,
                             loadIcon = { vm.loadIcon(it) },
                             onLaunch = { vm.launchApp(it) },
                             onNavigate = { screen = it },
+                            onOpenQuickSettings = { vm.openQuickSettings() },
                         )
                         TvScreen.AllApps -> AllAppsScreen(
                             apps = a,
@@ -192,6 +196,26 @@ fun NexusTvApp(vm: TvViewModel, startedAsHome: Boolean) {
                     SecurityReviewGateDialog(
                         request = gateReq,
                         onDismiss = { vm.networkManager.dismissGate() }
+                    )
+                }
+
+                if (isQuickSettingsOpen) {
+                    QuickSettingsDialog(
+                        use24Hour = p.use24Hour,
+                        launcherMode = launcherMode,
+                        pairedPhoneCount = pairedDevices.size,
+                        onUse24Hour = { vm.setUse24Hour(it) },
+                        onLauncherMode = { vm.setLauncherMode(it) },
+                        onStartScreensaver = { vm.startScreensaver() },
+                        onOpenFullSettings = { screen = TvScreen.Settings },
+                        onDismiss = { vm.closeQuickSettings() }
+                    )
+                }
+
+                if (isScreensaverActive) {
+                    TvScreensaver(
+                        use24Hour = p.use24Hour,
+                        onWake = { vm.dismissScreensaver() }
                     )
                 }
             }

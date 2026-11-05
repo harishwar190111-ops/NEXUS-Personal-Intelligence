@@ -22,6 +22,7 @@ import com.nexus.personalintelligence.tv.data.AppRepository
 import com.nexus.personalintelligence.tv.data.LaunchResult
 import com.nexus.personalintelligence.tv.data.TvPrefs
 import com.nexus.personalintelligence.tv.data.TvPrefsRepository
+import com.nexus.personalintelligence.tv.data.TvScreensaverManager
 import com.nexus.personalintelligence.tv.data.WebLogic
 import com.nexus.personalintelligence.tv.data.WebShortcut
 import java.io.File
@@ -36,10 +37,13 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     private val appRepo = AppRepository(app)
     private val prefsRepo = TvPrefsRepository(app)
     val networkManager = TvNetworkManager()
+    val screensaverManager = TvScreensaverManager()
     private val commandDispatcher = TvCommandDispatcher(app, appRepo)
 
     val securityGateRequest: StateFlow<SecurityGateRequest?> = networkManager.securityGateRequest
     val pairedDevices: StateFlow<List<PairedDevice>> = networkManager.pairedDevices
+    val isScreensaverActive: StateFlow<Boolean> = screensaverManager.isScreensaverActive
+    val isQuickSettingsOpen: StateFlow<Boolean> = screensaverManager.isQuickSettingsOpen
 
     private val _apps = MutableStateFlow<List<AppEntry>?>(null)
     val apps: StateFlow<List<AppEntry>?> = _apps
@@ -69,7 +73,10 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
             addDataScheme("package")
         }
         ContextCompat.registerReceiver(app, packageReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
-        networkManager.commandHandler = { cmd -> commandDispatcher.dispatch(cmd) }
+        networkManager.commandHandler = { cmd ->
+            screensaverManager.recordActivity()
+            commandDispatcher.dispatch(cmd)
+        }
         networkManager.start()
         refresh()
     }
@@ -166,6 +173,12 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
             _message.value = "Android refused to change launcher mode."
         }
     }
+
+    fun startScreensaver() = screensaverManager.startScreensaver()
+    fun dismissScreensaver() = screensaverManager.dismissScreensaver()
+    fun openQuickSettings() = screensaverManager.openQuickSettings()
+    fun closeQuickSettings() = screensaverManager.closeQuickSettings()
+    fun recordUserActivity() = screensaverManager.recordActivity()
 
     fun revokePairedDevice(deviceId: String): Boolean = networkManager.revokeDevice(deviceId)
 

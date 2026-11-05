@@ -51,9 +51,11 @@ import kotlinx.coroutines.delay
 fun HomeScreen(
     apps: List<AppEntry>,
     prefs: TvPrefs,
+    pairedPhoneCount: Int = 0,
     loadIcon: suspend (AppEntry) -> AppIcon?,
     onLaunch: (AppEntry) -> Unit,
     onNavigate: (TvScreen) -> Unit,
+    onOpenQuickSettings: () -> Unit = {},
 ) {
     val st = LocalNexusStyle.current
     val byPackage = remember(apps) { apps.associateBy { it.packageName } }
@@ -106,9 +108,17 @@ fun HomeScreen(
                 Spacer(Modifier.height(10.dp))
                 Text(NexusTime.greetingFor(now.hour), style = nexusTitleStyle(30.sp))
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatusChip("Phone link: not paired", StatusKind.Planned, fontSize = 13.sp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (pairedPhoneCount > 0) {
+                        StatusChip("$pairedPhoneCount phones paired", StatusKind.Implemented, fontSize = 13.sp)
+                    } else {
+                        StatusChip("Phone link: ready", StatusKind.Foundation, fontSize = 13.sp)
+                    }
                     StatusChip("${apps.size} apps found", StatusKind.Foundation, fontSize = 13.sp)
+                    TvButton("Quick settings", onOpenQuickSettings, horizontalPadding = 12.dp)
                 }
             }
             ClockBlock(now, prefs.use24Hour)
