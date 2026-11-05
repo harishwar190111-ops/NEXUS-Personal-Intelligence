@@ -17,7 +17,8 @@ class NexusSocketServer(
     private val tvDeviceName: String = "NEXUS TV",
     private val commandDispatcher: suspend (RemoteCommand) -> CommandResult = {
         CommandResult(commandId = it.commandId, success = true, message = "Executed ${it.type}")
-    }
+    },
+    var tvManagementHandler: com.nexus.personalintelligence.core.remote.management.TvManagementProtocolHandler = com.nexus.personalintelligence.core.remote.management.TvManagementProtocolHandler()
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val secureRandom = SecureRandom()
@@ -275,6 +276,25 @@ class NexusSocketServer(
                             device.lastSeenAt = System.currentTimeMillis()
                             val result = commandDispatcher(env.command)
                             val resp = NetworkPacket(type = MessageType.COMMAND_RESULT, id = packet.id, payload = json.encodeToString(result))
+                            writer.println(json.encodeToString(resp))
+                        }
+                    }
+                    MessageType.TV_MANAGEMENT_REQUEST -> {
+                        val req = json.decodeFromString<com.nexus.personalintelligence.core.remote.management.TvManagementRequest>(packet.payload)
+                        val device = currentDeviceId?.let { pairedDevices[it] }
+                        if (device == null || device.isRevoked || device.sessionToken != packet.sessionToken || System.currentTimeMillis() > device.expiresAt) {
+                            val errResp = com.nexus.personalintelligence.core.remote.management.TvManagementResponse(
+                                requestId = req.requestId,
+                                action = req.action,
+                                success = false,
+                                message = "Unauthorized TV management request"
+                            )
+                            val resp = NetworkPacket(type = MessageType.TV_MANAGEMENT_RESPONSE, id = packet.id, payload = json.encodeToString(errResp))
+                            writer.println(json.encodeToString(resp))
+                        } else {
+                            device.lastSeenAt = System.currentTimeMillis()
+                            val result = tvManagementHandler.handleRequest(req)
+                            val resp = NetworkPacket(type = MessageType.TV_MANAGEMENT_RESPONSE, id = packet.id, payload = json.encodeToString(result))
                             writer.println(json.encodeToString(resp))
                         }
                     }

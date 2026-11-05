@@ -107,7 +107,9 @@ enum class MessageType {
     COMMAND_RESULT,
     PING,
     PONG,
-    DISCONNECT
+    DISCONNECT,
+    TV_MANAGEMENT_REQUEST,
+    TV_MANAGEMENT_RESPONSE
 }
 
 @Serializable

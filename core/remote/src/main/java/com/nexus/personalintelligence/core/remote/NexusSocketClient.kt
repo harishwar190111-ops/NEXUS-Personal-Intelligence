@@ -224,6 +224,41 @@ class NexusSocketClient(
         }
     }
 
+    suspend fun sendTvManagementRequest(
+        request: com.nexus.personalintelligence.core.remote.management.TvManagementRequest,
+        sessionToken: String? = currentSessionToken
+    ): com.nexus.personalintelligence.core.remote.management.TvManagementResponse {
+        val token = sessionToken ?: currentSessionToken ?: return com.nexus.personalintelligence.core.remote.management.TvManagementResponse(
+            requestId = request.requestId,
+            action = request.action,
+            success = false,
+            message = "Not authenticated"
+        )
+
+        val packet = sendPacketAndAwait(
+            type = MessageType.TV_MANAGEMENT_REQUEST,
+            payload = json.encodeToString(request),
+            sessionToken = token,
+            timeoutMs = 5000
+        ) ?: return com.nexus.personalintelligence.core.remote.management.TvManagementResponse(
+            requestId = request.requestId,
+            action = request.action,
+            success = false,
+            message = "Management request timed out"
+        )
+
+        return try {
+            json.decodeFromString<com.nexus.personalintelligence.core.remote.management.TvManagementResponse>(packet.payload)
+        } catch (e: Exception) {
+            com.nexus.personalintelligence.core.remote.management.TvManagementResponse(
+                requestId = request.requestId,
+                action = request.action,
+                success = false,
+                message = "Failed to parse TV management response: ${e.message}"
+            )
+        }
+    }
+
     suspend fun reconnect(): Boolean {
         val host = currentHost ?: return false
         val port = currentPort
