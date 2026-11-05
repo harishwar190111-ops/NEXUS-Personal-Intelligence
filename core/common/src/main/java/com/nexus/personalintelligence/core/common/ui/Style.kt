@@ -141,6 +141,8 @@ object ThemePresets {
 
     fun byId(id: String?): ThemePreset = all.firstOrNull { it.id == id } ?: all.first()
 
+    fun isValidId(id: String?): Boolean = all.any { it.id == id }
+
     fun resolve(presetId: String?, custom: CustomTheme, backgroundOverride: BackgroundSpec?): ResolvedTheme {
         val preset = byId(presetId)
         return if (preset.id == CUSTOM_ID) {

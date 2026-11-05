@@ -2,9 +2,13 @@ package com.nexus.personalintelligence.tv.network
 
 import android.content.Context
 import android.os.Build
+import com.nexus.personalintelligence.core.common.ui.BackgroundSpec
+import com.nexus.personalintelligence.core.common.ui.BackgroundType
+import com.nexus.personalintelligence.core.common.ui.ThemePresets
 import com.nexus.personalintelligence.core.remote.CommandResult
 import com.nexus.personalintelligence.core.remote.NexusSocketServer
 import com.nexus.personalintelligence.core.remote.PairedDevice
+import com.nexus.personalintelligence.core.remote.PairedDeviceStore
 import com.nexus.personalintelligence.core.remote.RemoteCommand
 import com.nexus.personalintelligence.core.remote.management.TvInstalledApp
 import com.nexus.personalintelligence.core.remote.management.TvManagementAction
@@ -13,6 +17,7 @@ import com.nexus.personalintelligence.core.remote.management.TvManagementRespons
 import com.nexus.personalintelligence.tv.data.AppRepository
 import com.nexus.personalintelligence.tv.data.TvPrefs
 import com.nexus.personalintelligence.tv.data.TvPrefsRepository
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,7 +44,8 @@ class TvNetworkManager(
     private val tvDeviceName: String = Build.MODEL ?: "NEXUS TV",
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     private val appRepo: AppRepository? = null,
-    private val prefsRepo: TvPrefsRepository? = null
+    private val prefsRepo: TvPrefsRepository? = null,
+    private val pairedDeviceStore: PairedDeviceStore? = null
 ) {
     private val _securityGateRequest = MutableStateFlow<SecurityGateRequest?>(null)
     val securityGateRequest: StateFlow<SecurityGateRequest?> = _securityGateRequest.asStateFlow()
@@ -94,7 +100,28 @@ class TvNetworkManager(
                 scope.launch { prefsRepo.setPreset(themeId) }
             },
             onWallpaperChanged = { path ->
-                scope.launch { prefsRepo.setImagePath(path) }
+                scope.launch {
+                    if (path == "reset" || path == "default") {
+                        prefsRepo.resetBackground()
+                    } else {
+                        prefsRepo.setImagePath(path)
+                        val current = prefsRepo.prefs.firstOrNull()?.theme?.background ?: BackgroundSpec()
+                        prefsRepo.setBackground(current.copy(type = BackgroundType.Image))
+                    }
+                }
+            },
+            themeValidator = { themeId ->
+                ThemePresets.isValidId(themeId)
+            },
+            wallpaperValidator = { path ->
+                if (path == "reset" || path == "default") {
+                    true
+                } else {
+                    runCatching {
+                        val f = File(path)
+                        f.exists() && f.isFile && f.length() > 0
+                    }.getOrDefault(false)
+                }
             },
             onFavouritesUpdated = { pkgs ->
                 scope.launch { prefsRepo.setFavourites(pkgs) }
@@ -121,7 +148,8 @@ class TvNetworkManager(
                 message = "Command handler not wired on TV"
             )
         },
-        tvManagementHandler = createManagementHandler()
+        tvManagementHandler = createManagementHandler(),
+        pairedDeviceStore = pairedDeviceStore
     )
 
     init {

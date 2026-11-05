@@ -40,8 +40,39 @@ data class PairedTvInfo(
     val isPaired: Boolean get() = sessionToken.isNotBlank() && host.isNotBlank()
 }
 
+object MobileTokenCipher {
+    const val PREFIX = "enc:v1:"
+    private val UUID_REGEX = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+    fun encryptToken(rawToken: String): Result<String> {
+        if (rawToken.isBlank()) return Result.success("")
+        return runCatching {
+            val ciphertext = SecretCipher.encrypt(rawToken)
+            "$PREFIX$ciphertext"
+        }
+    }
+
+    fun decryptToken(storedValue: String): String? {
+        if (storedValue.isBlank()) return ""
+        if (storedValue.startsWith(PREFIX)) {
+            val payload = storedValue.removePrefix(PREFIX)
+            return runCatching { SecretCipher.decrypt(payload) }.getOrNull()
+        }
+        // Legacy unversioned format with iv:ciphertext
+        if (storedValue.contains(":") && !storedValue.startsWith(PREFIX)) {
+            return runCatching { SecretCipher.decrypt(storedValue) }.getOrNull()
+        }
+        // Legacy plaintext token: accept only the exact format the TV server actually generates (UUID)
+        if (storedValue.length == 36 && UUID_REGEX.matches(storedValue)) {
+            return storedValue
+        }
+        // Any other unprefixed or corrupt value means unpaired state
+        return null
+    }
+}
+
 interface PairedTvStorage {
-    suspend fun savePairedTv(info: PairedTvInfo)
+    suspend fun savePairedTv(info: PairedTvInfo): Result<Unit>
     suspend fun clearPairedTv()
 }
 
@@ -74,6 +105,11 @@ class MobileSettingsRepository(private val context: Context) : PairedTvStorage {
         .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
         .map { p ->
             val type = ProviderType.fromId(p[Keys.PROVIDER])
+            val storedToken = p[Keys.TV_SESSION_TOKEN].orEmpty()
+            val decryptedToken = MobileTokenCipher.decryptToken(storedToken)
+            val effectiveToken = decryptedToken ?: ""
+            val isPaired = effectiveToken.isNotBlank() && !p[Keys.TV_HOST].isNullOrBlank()
+
             MobileSettings(
                 displayName = p[Keys.NAME].orEmpty(),
                 language = AssistantLanguage.fromId(p[Keys.LANGUAGE]),
@@ -84,12 +120,12 @@ class MobileSettingsRepository(private val context: Context) : PairedTvStorage {
                     hasApiKey = p[Keys.KEY_CIPHER] != null,
                 ),
                 pairedTv = PairedTvInfo(
-                    host = p[Keys.TV_HOST].orEmpty(),
+                    host = if (isPaired) p[Keys.TV_HOST].orEmpty() else "",
                     port = p[Keys.TV_PORT] ?: 8765,
-                    tvDeviceName = p[Keys.TV_NAME].orEmpty(),
-                    sessionToken = p[Keys.TV_SESSION_TOKEN].orEmpty(),
-                    deviceId = p[Keys.TV_DEVICE_ID].orEmpty(),
-                    pairedAt = p[Keys.TV_PAIRED_AT] ?: 0L
+                    tvDeviceName = if (isPaired) p[Keys.TV_NAME].orEmpty() else "",
+                    sessionToken = effectiveToken,
+                    deviceId = if (isPaired) p[Keys.TV_DEVICE_ID].orEmpty() else "",
+                    pairedAt = if (isPaired) (p[Keys.TV_PAIRED_AT] ?: 0L) else 0L
                 )
             )
         }
@@ -127,15 +163,27 @@ class MobileSettingsRepository(private val context: Context) : PairedTvStorage {
         context.mobileStore.edit { p -> p.remove(Keys.KEY_CIPHER) }
     }
 
-    override suspend fun savePairedTv(info: PairedTvInfo) {
+    override suspend fun savePairedTv(info: PairedTvInfo): Result<Unit> {
+        val encryptedResult = if (info.sessionToken.isNotBlank()) {
+            MobileTokenCipher.encryptToken(info.sessionToken)
+        } else {
+            Result.success("")
+        }
+
+        if (encryptedResult.isFailure) {
+            return Result.failure(encryptedResult.exceptionOrNull() ?: IllegalStateException("Failed to securely encrypt pairing token"))
+        }
+
+        val encryptedToken = encryptedResult.getOrThrow()
         context.mobileStore.edit { p ->
             p[Keys.TV_HOST] = info.host
             p[Keys.TV_PORT] = info.port
             p[Keys.TV_NAME] = info.tvDeviceName
-            p[Keys.TV_SESSION_TOKEN] = info.sessionToken
+            p[Keys.TV_SESSION_TOKEN] = encryptedToken
             p[Keys.TV_DEVICE_ID] = info.deviceId
             p[Keys.TV_PAIRED_AT] = info.pairedAt
         }
+        return Result.success(Unit)
     }
 
     override suspend fun clearPairedTv() {

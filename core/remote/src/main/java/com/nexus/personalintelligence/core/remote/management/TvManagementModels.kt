@@ -58,7 +58,9 @@ open class TvManagementProtocolHandler(
     private val onAppVisibilityChanged: ((packageName: String, isHidden: Boolean) -> Unit)? = null,
     private val onClockStyleChanged: ((Boolean) -> Unit)? = null,
     private val onHomeLayoutChanged: ((String) -> Unit)? = null,
-    private val storageMetricsProvider: (() -> Pair<Long, Long>)? = null
+    private val storageMetricsProvider: (() -> Pair<Long, Long>)? = null,
+    private val themeValidator: ((String) -> Boolean)? = null,
+    private val wallpaperValidator: ((String) -> Boolean)? = null
 ) {
     fun handleRequest(request: TvManagementRequest): TvManagementResponse {
         return when (request.action) {
@@ -92,6 +94,8 @@ open class TvManagementProtocolHandler(
                     val themeId = request.payload.trim()
                     if (themeId.isBlank()) {
                         TvManagementResponse(request.requestId, request.action, false, "Theme preset ID cannot be blank")
+                    } else if (themeValidator != null && !themeValidator(themeId)) {
+                        TvManagementResponse(request.requestId, request.action, false, "Unknown theme preset ID: $themeId")
                     } else {
                         handler(themeId)
                         TvManagementResponse(request.requestId, request.action, true, "Theme set to $themeId", themePresetId = themeId)
@@ -104,8 +108,14 @@ open class TvManagementProtocolHandler(
                     TvManagementResponse(request.requestId, request.action, false, "SET_WALLPAPER unsupported: no wallpaper preference handler wired")
                 } else {
                     val path = request.payload.trim()
-                    handler(path)
-                    TvManagementResponse(request.requestId, request.action, true, "Wallpaper updated", wallpaperPath = path)
+                    if (path.isBlank()) {
+                        TvManagementResponse(request.requestId, request.action, false, "Wallpaper path cannot be blank")
+                    } else if (wallpaperValidator != null && !wallpaperValidator(path)) {
+                        TvManagementResponse(request.requestId, request.action, false, "Invalid wallpaper path or inaccessible image: $path")
+                    } else {
+                        handler(path)
+                        TvManagementResponse(request.requestId, request.action, true, "Wallpaper updated", wallpaperPath = path)
+                    }
                 }
             }
             TvManagementAction.SET_FAVOURITES -> {

@@ -14,7 +14,9 @@ import com.nexus.personalintelligence.core.common.profile.UserProfileStore
 import com.nexus.personalintelligence.core.common.ui.BackgroundSpec
 import com.nexus.personalintelligence.core.common.ui.BackgroundType
 import com.nexus.personalintelligence.core.common.ui.CustomTheme
+import com.nexus.personalintelligence.core.remote.AesGcmPairedDeviceStore
 import com.nexus.personalintelligence.core.remote.PairedDevice
+import com.nexus.personalintelligence.tv.security.AndroidKeystoreDeviceKeyProvider
 import com.nexus.personalintelligence.core.remote.diagnostics.CommandHistoryTracker
 import com.nexus.personalintelligence.core.remote.events.EventCategory
 import com.nexus.personalintelligence.core.remote.events.EventSeverity
@@ -43,6 +45,41 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+class TvTextInputCoordinator {
+    var activeTextReceiver: ((String) -> Boolean)? = null
+
+    private val _receivedTextBuffer = MutableStateFlow("")
+    val receivedTextBuffer: StateFlow<String> = _receivedTextBuffer.asStateFlow()
+
+    fun bindVisibleInputField(consumer: ((String) -> Boolean)? = null) {
+        activeTextReceiver = consumer ?: { true }
+    }
+
+    fun unbindVisibleInputField() {
+        activeTextReceiver = null
+        _receivedTextBuffer.value = ""
+    }
+
+    fun handleReceivedText(text: String): Boolean {
+        val receiver = activeTextReceiver ?: return false
+        val accepted = receiver(text)
+        if (accepted) {
+            when (text) {
+                "\b" -> {
+                    if (_receivedTextBuffer.value.isNotEmpty()) {
+                        _receivedTextBuffer.value = _receivedTextBuffer.value.dropLast(1)
+                    }
+                }
+                "\n" -> {}
+                else -> {
+                    _receivedTextBuffer.value += text
+                }
+            }
+        }
+        return accepted
+    }
+}
+
 class TvViewModel(app: Application) : AndroidViewModel(app) {
     private val appRepo = AppRepository(app)
     private val prefsRepo = TvPrefsRepository(app)
@@ -53,32 +90,24 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
     val audioEngine = TvAudioEngine()
     val networkManager = TvNetworkManager(
         appRepo = appRepo,
-        prefsRepo = prefsRepo
+        prefsRepo = prefsRepo,
+        pairedDeviceStore = AesGcmPairedDeviceStore(
+            file = File(app.filesDir, "paired_devices.enc"),
+            keyProvider = AndroidKeystoreDeviceKeyProvider()
+        )
     )
     val screensaverManager = TvScreensaverManager()
-    var activeTextReceiver: ((String) -> Boolean)? = null
+    val textCoordinator = TvTextInputCoordinator()
 
-    private val _receivedTextBuffer = MutableStateFlow("")
-    val receivedTextBuffer: StateFlow<String> = _receivedTextBuffer.asStateFlow()
+    var activeTextReceiver: ((String) -> Boolean)?
+        get() = textCoordinator.activeTextReceiver
+        set(value) { textCoordinator.activeTextReceiver = value }
 
-    fun handleReceivedText(text: String): Boolean {
-        activeTextReceiver?.let { return it(text) }
-        when (text) {
-            "\b" -> {
-                if (_receivedTextBuffer.value.isNotEmpty()) {
-                    _receivedTextBuffer.value = _receivedTextBuffer.value.dropLast(1)
-                }
-                return true
-            }
-            "\n" -> {
-                return true
-            }
-            else -> {
-                _receivedTextBuffer.value += text
-                return true
-            }
-        }
-    }
+    val receivedTextBuffer: StateFlow<String> get() = textCoordinator.receivedTextBuffer
+
+    fun bindVisibleInputField(consumer: ((String) -> Boolean)? = null) = textCoordinator.bindVisibleInputField(consumer)
+    fun unbindVisibleInputField() = textCoordinator.unbindVisibleInputField()
+    fun handleReceivedText(text: String): Boolean = textCoordinator.handleReceivedText(text)
 
     private val commandDispatcher = TvCommandDispatcher(
         context = app,

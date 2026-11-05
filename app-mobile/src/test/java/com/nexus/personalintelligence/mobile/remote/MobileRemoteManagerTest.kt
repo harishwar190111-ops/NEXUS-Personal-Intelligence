@@ -30,9 +30,12 @@ class MobileRemoteManagerTest {
 
     class FakePairedTvStorage : PairedTvStorage {
         var savedInfo: PairedTvInfo? = null
+        var shouldFailSave: Boolean = false
 
-        override suspend fun savePairedTv(info: PairedTvInfo) {
+        override suspend fun savePairedTv(info: PairedTvInfo): Result<Unit> {
+            if (shouldFailSave) return Result.failure(IllegalStateException("Simulated storage encryption failure"))
             savedInfo = info
+            return Result.success(Unit)
         }
 
         override suspend fun clearPairedTv() {
@@ -168,6 +171,8 @@ class MobileRemoteManagerTest {
         val cmdTamil = RemoteCommand(type = RemoteCommandType.TEXT_INPUT, text = tamilWord)
         val resTamil = mgr.sendCommand(cmdTamil)
         assertTrue(resTamil.success)
+        assertEquals("Text input delivered", resTamil.message)
+        assertFalse("Message must never contain typed text", resTamil.message.contains(tamilWord))
 
         // Verify commands reached server
         assertEquals(3, receivedCommands.size)
@@ -178,7 +183,41 @@ class MobileRemoteManagerTest {
 
         // Verify command history and event store tracking
         assertEquals(3, mgr.historyTracker.size())
-        assertTrue("Event store should track pairing and command events", mgr.eventStore.size() >= 3)
+        assertFalse(mgr.historyTracker.getHistory().any { it.message.contains(tamilWord) })
+        assertTrue("Event store should track pairing and command events", mgr.eventStore.listEvents().size >= 3)
+    }
+
+    @Test
+    fun testTextInputFailurePreservesTruthfulFailureMessageAndNeverDelivered() = runBlocking {
+        // Create server that rejects text input
+        server?.stop()
+        server = NexusSocketServer(
+            port = 0,
+            tvDeviceName = "Test TV",
+            commandDispatcher = { cmd ->
+                CommandResult(cmd.commandId, false, "No active text receiver on TV")
+            }
+        )
+        server?.start()
+        val s = server ?: throw IllegalStateException("server null")
+        val mgr = remoteManager ?: throw IllegalStateException("mgr null")
+
+        var correctPin = ""
+        s.securityGateCallback = { _, _, pin, onApprove, _ ->
+            correctPin = pin
+            onApprove()
+        }
+
+        mgr.startPairing("127.0.0.1", s.actualPort, "Samsung Galaxy F54")
+        mgr.verifyPin(correctPin)
+
+        val cmd = RemoteCommand(type = RemoteCommandType.TEXT_INPUT, text = "secret-pass")
+        val res = mgr.sendCommand(cmd)
+
+        assertFalse("Command must indicate failure", res.success)
+        assertEquals("No active text receiver on TV", res.message)
+        assertFalse("Must never say delivered when failure occurs", res.message.contains("delivered"))
+        assertFalse("Must never leak typed text in failure message", res.message.contains("secret-pass"))
     }
 
     @Test

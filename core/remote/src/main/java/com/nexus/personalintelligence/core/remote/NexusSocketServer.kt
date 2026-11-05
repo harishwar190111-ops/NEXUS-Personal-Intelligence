@@ -29,10 +29,17 @@ class NexusSocketServer(
     private var isRunning = false
 
     val pairedDevices = ConcurrentHashMap<String, PairedDevice>()
+    var lastStoreLoadError: String? = null
+        private set
 
     init {
-        pairedDeviceStore?.loadDevices()?.forEach { device ->
-            pairedDevices[device.deviceId] = device
+        try {
+            pairedDeviceStore?.loadDevices()?.forEach { device ->
+                pairedDevices[device.deviceId] = device
+            }
+        } catch (e: Exception) {
+            lastStoreLoadError = "Failed to load paired devices from store: ${e.message}"
+            pairedDevices.clear()
         }
     }
 

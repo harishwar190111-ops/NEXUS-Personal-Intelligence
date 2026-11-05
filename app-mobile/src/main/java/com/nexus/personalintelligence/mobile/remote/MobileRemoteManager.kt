@@ -108,7 +108,19 @@ class MobileRemoteManager(
                 deviceId = myDeviceId,
                 pairedAt = System.currentTimeMillis()
             )
-            storage.savePairedTv(info)
+            val saveResult = storage.savePairedTv(info)
+            if (saveResult.isFailure) {
+                _statusMessage.value = "Failed to securely store pairing token"
+                eventStore.addEvent(
+                    NexusEvent(
+                        title = "Storage Error",
+                        message = "Could not encrypt and save session token",
+                        severity = EventSeverity.ALERT,
+                        category = EventCategory.PAIRING
+                    )
+                )
+                return verifyResp.copy(status = PairingStatus.REJECTED, message = "Failed to securely store token")
+            }
             eventStore.addEvent(
                 NexusEvent(
                     title = "Pairing Complete",
@@ -192,32 +204,31 @@ class MobileRemoteManager(
 
     suspend fun sendCommand(command: RemoteCommand): CommandResult {
         val result = client.sendCommand(command)
-        val safeMessage = if (command.type == RemoteCommandType.TEXT_INPUT) {
-            "Text input delivered"
+        val cmdText = command.text
+        val safeMessage = if (result.success) {
+            if (command.type == RemoteCommandType.TEXT_INPUT) "Text input delivered" else result.message
         } else {
-            result.message
+            val failureText = if (result.message.isNotBlank()) result.message else "Command ${command.type} failed on TV"
+            if (!cmdText.isNullOrBlank()) failureText.replace(cmdText, "[REDACTED]") else failureText
         }
+        val safeResult = result.copy(message = safeMessage)
         historyTracker.addEntry(
             CommandHistoryEntry(
                 commandId = command.commandId,
                 type = command.type.name,
-                success = result.success,
-                message = safeMessage
+                success = safeResult.success,
+                message = safeResult.message
             )
         )
         eventStore.addEvent(
             NexusEvent(
                 title = "Command: ${command.type.name}",
-                message = safeMessage,
-                severity = if (result.success) EventSeverity.INFO else EventSeverity.WARNING,
+                message = safeResult.message,
+                severity = if (safeResult.success) EventSeverity.INFO else EventSeverity.WARNING,
                 category = EventCategory.COMMAND
             )
         )
-        return if (command.type == RemoteCommandType.TEXT_INPUT) {
-            result.copy(message = safeMessage)
-        } else {
-            result
-        }
+        return safeResult
     }
 
     fun disconnect() {
