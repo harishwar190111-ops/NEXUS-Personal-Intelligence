@@ -12,6 +12,10 @@ import androidx.lifecycle.viewModelScope
 import com.nexus.personalintelligence.core.common.ui.BackgroundSpec
 import com.nexus.personalintelligence.core.common.ui.BackgroundType
 import com.nexus.personalintelligence.core.common.ui.CustomTheme
+import com.nexus.personalintelligence.core.remote.PairedDevice
+import com.nexus.personalintelligence.tv.network.SecurityGateRequest
+import com.nexus.personalintelligence.tv.network.TvCommandDispatcher
+import com.nexus.personalintelligence.tv.network.TvNetworkManager
 import com.nexus.personalintelligence.tv.data.AppEntry
 import com.nexus.personalintelligence.tv.data.AppIcon
 import com.nexus.personalintelligence.tv.data.AppRepository
@@ -31,6 +35,11 @@ import kotlinx.coroutines.launch
 class TvViewModel(app: Application) : AndroidViewModel(app) {
     private val appRepo = AppRepository(app)
     private val prefsRepo = TvPrefsRepository(app)
+    val networkManager = TvNetworkManager()
+    private val commandDispatcher = TvCommandDispatcher(app, appRepo)
+
+    val securityGateRequest: StateFlow<SecurityGateRequest?> = networkManager.securityGateRequest
+    val pairedDevices: StateFlow<List<PairedDevice>> = networkManager.pairedDevices
 
     private val _apps = MutableStateFlow<List<AppEntry>?>(null)
     val apps: StateFlow<List<AppEntry>?> = _apps
@@ -60,6 +69,8 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
             addDataScheme("package")
         }
         ContextCompat.registerReceiver(app, packageReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
+        networkManager.commandHandler = { cmd -> commandDispatcher.dispatch(cmd) }
+        networkManager.start()
         refresh()
     }
 
@@ -156,7 +167,12 @@ class TvViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun revokePairedDevice(deviceId: String): Boolean = networkManager.revokeDevice(deviceId)
+
+    fun removePairedDevice(deviceId: String): Boolean = networkManager.removeDevice(deviceId)
+
     override fun onCleared() {
+        networkManager.stop()
         try {
             getApplication<Application>().unregisterReceiver(packageReceiver)
         } catch (e: IllegalArgumentException) {

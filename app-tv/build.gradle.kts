@@ -38,6 +38,7 @@ android {
 
     buildTypes {
         debug {
+            applicationIdSuffix = ".r2debug"
             signingConfigs.findByName("nexus")?.let { signingConfig = it }
         }
         release {
@@ -73,6 +74,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core:common"))
+    implementation(project(":core:remote"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)

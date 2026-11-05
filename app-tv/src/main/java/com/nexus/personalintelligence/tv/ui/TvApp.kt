@@ -41,6 +41,8 @@ fun NexusTvApp(vm: TvViewModel, startedAsHome: Boolean) {
     val apps by vm.apps.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
     val launcherMode by vm.launcherMode.collectAsStateWithLifecycle()
+    val securityGateRequest by vm.securityGateRequest.collectAsStateWithLifecycle()
+    val pairedDevices by vm.pairedDevices.collectAsStateWithLifecycle()
     var screen by remember { mutableStateOf(TvScreen.Home) }
     var entry by remember { mutableStateOf<EntryRequest?>(null) }
 
@@ -164,11 +166,14 @@ fun NexusTvApp(vm: TvViewModel, startedAsHome: Boolean) {
                             appCount = a.size,
                             launcherMode = launcherMode,
                             browsers = remember(screen) { vm.browserNames() },
+                            pairedDevices = pairedDevices,
                             onUse24Hour = { vm.setUse24Hour(it) },
                             onClearRecents = { vm.clearRecents() },
                             onClearFavourites = { vm.clearFavourites() },
                             onLauncherMode = { vm.setLauncherMode(it) },
                             onOpenSystemSettings = { vm.openSystemSettings() },
+                            onRevokeDevice = { vm.revokePairedDevice(it) },
+                            onRemoveDevice = { vm.removePairedDevice(it) },
                         )
                     }
                 }
@@ -181,6 +186,13 @@ fun NexusTvApp(vm: TvViewModel, startedAsHome: Boolean) {
                     GlassPanel(Modifier.align(Alignment.BottomCenter).padding(bottom = 36.dp)) {
                         Text(text, Modifier.padding(horizontal = 28.dp, vertical = 14.dp), fontSize = 16.sp)
                     }
+                }
+
+                securityGateRequest?.let { gateReq ->
+                    SecurityReviewGateDialog(
+                        request = gateReq,
+                        onDismiss = { vm.networkManager.dismissGate() }
+                    )
                 }
             }
         }

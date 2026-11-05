@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -40,6 +41,7 @@ import com.nexus.personalintelligence.mobile.MobileViewModel
 
 enum class Tab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
+    Remote("Remote", Icons.Filled.PlayArrow),
     Assistant("Assistant", Icons.Filled.Face),
     Devices("Devices", Icons.Filled.Phone),
     Settings("Settings", Icons.Filled.Settings),
@@ -49,6 +51,10 @@ enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 fun NexusMobileApp(vm: MobileViewModel) {
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val connectionState by vm.connectionState.collectAsStateWithLifecycle()
+    val pairingStatus by vm.pairingStatus.collectAsStateWithLifecycle()
+    val remoteStatusMessage by vm.remoteStatusMessage.collectAsStateWithLifecycle()
+
     var tabName by rememberSaveable { mutableStateOf(Tab.Home.name) }
     val tab = Tab.entries.firstOrNull { it.name == tabName } ?: Tab.Home
     val s = settings
@@ -64,9 +70,26 @@ fun NexusMobileApp(vm: MobileViewModel) {
                     if (s != null) {
                         Crossfade(targetState = tab, animationSpec = tween(180), label = "tabs") { t ->
                             when (t) {
-                                Tab.Home -> HomeScreen(s) { tabName = it.name }
+                                Tab.Home -> HomeScreen(s, connectionState) { tabName = it.name }
+                                Tab.Remote -> RemoteScreen(
+                                    pairedTv = s.pairedTv,
+                                    connectionState = connectionState,
+                                    onSendCommand = { vm.sendRemoteCommand(it) },
+                                    onNavigateToDevices = { tabName = Tab.Devices.name }
+                                )
                                 Tab.Assistant -> AssistantScreen(s)
-                                Tab.Devices -> DevicesScreen()
+                                Tab.Devices -> DevicesScreen(
+                                    settings = s,
+                                    connectionState = connectionState,
+                                    pairingStatus = pairingStatus,
+                                    statusMessage = remoteStatusMessage,
+                                    onStartPairing = { vm.startPairing(it) },
+                                    onVerifyPin = { vm.verifyPin(it) },
+                                    onReconnect = { vm.reconnectTv() },
+                                    onDisconnect = { vm.disconnectTv() },
+                                    onUnpair = { vm.unpairTv() },
+                                    onNavigateToRemote = { tabName = Tab.Remote.name }
+                                )
                                 Tab.Settings -> SettingsScreen(
                                     settings = s,
                                     onName = { vm.setDisplayName(it) },

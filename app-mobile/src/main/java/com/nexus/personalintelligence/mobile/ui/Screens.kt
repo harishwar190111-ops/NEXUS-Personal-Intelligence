@@ -56,6 +56,10 @@ import com.nexus.personalintelligence.core.common.ui.NexusWordmark
 import com.nexus.personalintelligence.core.common.ui.StatusChip
 import com.nexus.personalintelligence.core.common.ui.StatusKind
 import com.nexus.personalintelligence.core.common.util.NexusTime
+import com.nexus.personalintelligence.core.remote.ConnectionState
+import com.nexus.personalintelligence.core.remote.PairingStatus
+import com.nexus.personalintelligence.core.remote.RemoteCommand
+import com.nexus.personalintelligence.core.remote.RemoteCommandType
 import com.nexus.personalintelligence.mobile.ai.ProviderDraft
 import com.nexus.personalintelligence.mobile.ai.ProviderType
 import com.nexus.personalintelligence.mobile.ai.providerStatus
@@ -63,16 +67,29 @@ import com.nexus.personalintelligence.mobile.assistant.AssistantContext
 import com.nexus.personalintelligence.mobile.assistant.LocalCommandRouter
 import com.nexus.personalintelligence.mobile.data.AssistantLanguage
 import com.nexus.personalintelligence.mobile.data.MobileSettings
+import com.nexus.personalintelligence.mobile.data.PairedTvInfo
 import java.time.LocalDateTime
 
 // ---------------------------------------------------------------- Home
 
 @Composable
-fun HomeScreen(settings: MobileSettings, onNavigate: (Tab) -> Unit) {
+fun HomeScreen(
+    settings: MobileSettings,
+    connectionState: ConnectionState,
+    onNavigate: (Tab) -> Unit
+) {
     val now = remember { LocalDateTime.now() }
     val hello = NexusTime.greetingFor(now.hour)
     val name = settings.displayName
     val provider = settings.provider
+    val pairedTv = settings.pairedTv
+
+    val (tvTitle, tvChip, tvKind) = when {
+        !pairedTv.isPaired -> Triple("Not paired", "Tap to pair", StatusKind.Alert)
+        connectionState == ConnectionState.CONNECTED -> Triple(pairedTv.tvDeviceName.ifBlank { "NEXUS TV" }, "Connected", StatusKind.Implemented)
+        connectionState == ConnectionState.CONNECTING || connectionState == ConnectionState.RECONNECTING -> Triple(pairedTv.tvDeviceName.ifBlank { "NEXUS TV" }, "Connecting", StatusKind.Alert)
+        else -> Triple(pairedTv.tvDeviceName.ifBlank { "NEXUS TV" }, "Disconnected", StatusKind.Alert)
+    }
 
     Column(
         Modifier
@@ -99,12 +116,17 @@ fun HomeScreen(settings: MobileSettings, onNavigate: (Tab) -> Unit) {
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatusTile("Television", "Not paired", "No connection", StatusKind.Alert, Modifier.weight(1f))
+            StatusTile("Television", tvTitle, tvChip, tvKind, Modifier.weight(1f).clickable {
+                if (pairedTv.isPaired && connectionState == ConnectionState.CONNECTED) onNavigate(Tab.Remote) else onNavigate(Tab.Devices)
+            })
             StatusTile("Memory", "Nothing stored", "Release 4", StatusKind.Planned, Modifier.weight(1f))
         }
 
         SectionLabel("Quick actions")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (pairedTv.isPaired && connectionState == ConnectionState.CONNECTED) {
+                GlassButton("Remote", { onNavigate(Tab.Remote) })
+            }
             GlassButton("Ask NEXUS", { onNavigate(Tab.Assistant) })
             GlassButton("TVs", { onNavigate(Tab.Devices) })
             GlassButton("AI provider", { onNavigate(Tab.Settings) })
@@ -236,26 +258,123 @@ fun AssistantScreen(settings: MobileSettings) {
 // ---------------------------------------------------------------- Devices
 
 @Composable
-fun DevicesScreen() {
-    ScreenScaffold("Devices", "TV pairing is not implemented in this release, so no connection can be shown.") {
+fun DevicesScreen(
+    settings: MobileSettings,
+    connectionState: ConnectionState,
+    pairingStatus: PairingStatus?,
+    statusMessage: String?,
+    onStartPairing: (String) -> Unit,
+    onVerifyPin: (String) -> Unit,
+    onReconnect: () -> Unit,
+    onDisconnect: () -> Unit,
+    onUnpair: () -> Unit,
+    onNavigateToRemote: () -> Unit
+) {
+    val pairedTv = settings.pairedTv
+    var hostInput by remember(pairedTv.host) { mutableStateOf(if (pairedTv.host.isNotBlank()) pairedTv.host else "192.168.1.") }
+    var pinInput by remember { mutableStateOf("") }
+
+    val (statusLabel, statusKind) = when (connectionState) {
+        ConnectionState.CONNECTED -> "Connected" to StatusKind.Implemented
+        ConnectionState.CONNECTING -> "Connecting..." to StatusKind.Alert
+        ConnectionState.AWAITING_TV_APPROVAL -> "Awaiting TV Approval" to StatusKind.Alert
+        ConnectionState.RECONNECTING -> "Reconnecting..." to StatusKind.Alert
+        ConnectionState.AUTH_FAILED -> "Authentication Failed" to StatusKind.Alert
+        ConnectionState.DISCONNECTED -> (if (pairedTv.isPaired) "Disconnected" to StatusKind.Alert else "Not Paired" to StatusKind.Alert)
+        ConnectionState.NOT_PAIRED -> "Not Paired" to StatusKind.Alert
+    }
+
+    ScreenScaffold("Devices", "Connect NEXUS Mobile to your NEXUS Android TV over the local Wi-Fi network.") {
         GlassPanel(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("NEXUS TV", Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                    StatusChip("Not paired", StatusKind.Alert)
+                    Text(
+                        if (pairedTv.isPaired && pairedTv.tvDeviceName.isNotBlank()) pairedTv.tvDeviceName else "NEXUS TV",
+                        Modifier.weight(1f),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    StatusChip(statusLabel, statusKind)
                 }
-                InfoRow("Device name", "none")
-                InfoRow("Connection", "none verified")
-                InfoRow("Last synchronisation", "never")
+                InfoRow("TV IP / Host", if (pairedTv.isPaired) "${pairedTv.host}:${pairedTv.port}" else hostInput.ifBlank { "Not set" })
+                InfoRow("Session", if (pairedTv.isPaired) "Authenticated (${pairedTv.sessionToken.take(8)}...)" else "None")
+                InfoRow("Status", statusMessage ?: if (pairedTv.isPaired) "Paired" else "Ready to pair")
             }
         }
-        GlassButton("Pair a TV (Release 2)", {}, enabled = false)
-        SectionLabel("Set up the TV app")
-        GlassPanel(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("1. Install app-tv-debug.apk on the TV box (see the README).", fontSize = 14.sp)
-                Text("2. Open NEXUS TV from the Apps row. It works on its own, without this phone.", fontSize = 14.sp)
-                Text("3. Pairing, remote control and live sync arrive in Release 2. Nothing here pretends otherwise.", fontSize = 14.sp)
+
+        if (statusMessage != null) {
+            GlassPanel(Modifier.fillMaxWidth()) {
+                Text(
+                    statusMessage,
+                    Modifier.padding(12.dp),
+                    fontSize = 13.sp,
+                    color = NexusColors.TextSecondary
+                )
+            }
+        }
+
+        if (!pairedTv.isPaired) {
+            SectionLabel("Pair with TV")
+            GlassPanel(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "1. Ensure both your TV and phone are on the same Wi-Fi network.",
+                        fontSize = 13.sp,
+                        color = NexusColors.TextSecondary
+                    )
+                    Text(
+                        "2. Enter the TV's IP address (shown on the TV under Settings > Paired Phones).",
+                        fontSize = 13.sp,
+                        color = NexusColors.TextSecondary
+                    )
+                    OutlinedTextField(
+                        value = hostInput,
+                        onValueChange = { hostInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("TV IP Address") },
+                        placeholder = { Text("e.g. 192.168.1.100") },
+                        colors = nexusFieldColors()
+                    )
+
+                    GlassButton("Connect & Pair", {
+                        if (hostInput.isNotBlank()) onStartPairing(hostInput.trim())
+                    })
+
+                    if (pairingStatus == PairingStatus.PENDING_APPROVAL || connectionState == ConnectionState.AWAITING_TV_APPROVAL) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "TV approval requested! Check your TV screen and approve the pairing prompt.",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = LocalNexusAccent.current.color
+                        )
+                        OutlinedTextField(
+                            value = pinInput,
+                            onValueChange = { if (it.length <= 6 && it.all { c -> c.isDigit() }) pinInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("Enter 6-digit PIN from TV") },
+                            placeholder = { Text("6 digits (e.g. 123456)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = nexusFieldColors()
+                        )
+                        GlassButton("Verify PIN", {
+                            if (pinInput.length == 6) onVerifyPin(pinInput.trim())
+                        })
+                    }
+                }
+            }
+        } else {
+            SectionLabel("TV Controls & Session")
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (connectionState == ConnectionState.CONNECTED) {
+                    GlassButton("Open Remote", onNavigateToRemote)
+                    GlassButton("Disconnect", onDisconnect)
+                } else {
+                    GlassButton("Reconnect", onReconnect)
+                }
+                GlassButton("Unpair / Forget", onUnpair)
             }
         }
     }

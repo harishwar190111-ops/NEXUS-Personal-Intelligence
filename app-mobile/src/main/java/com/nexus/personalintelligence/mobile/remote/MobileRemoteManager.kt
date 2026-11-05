@@ -1,0 +1,131 @@
+package com.nexus.personalintelligence.mobile.remote
+
+import android.content.Context
+import android.os.Build
+import com.nexus.personalintelligence.core.remote.CommandResult
+import com.nexus.personalintelligence.core.remote.ConnectionState
+import com.nexus.personalintelligence.core.remote.NexusSocketClient
+import com.nexus.personalintelligence.core.remote.PairingResponse
+import com.nexus.personalintelligence.core.remote.PairingStatus
+import com.nexus.personalintelligence.core.remote.RemoteCommand
+import com.nexus.personalintelligence.mobile.data.PairedTvInfo
+import com.nexus.personalintelligence.mobile.data.PairedTvStorage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+class MobileRemoteManager(
+    private val storage: PairedTvStorage,
+    private val client: NexusSocketClient = NexusSocketClient(),
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+) {
+    val connectionState: StateFlow<ConnectionState> = client.connectionState
+
+    private val _pairingStatus = MutableStateFlow<PairingStatus?>(null)
+    val pairingStatus: StateFlow<PairingStatus?> = _pairingStatus.asStateFlow()
+
+    private val _statusMessage = MutableStateFlow<String?>(null)
+    val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
+    private var currentHost: String = ""
+    private var currentPort: Int = 8765
+    private var myDeviceId: String = UUID.randomUUID().toString()
+
+    suspend fun startPairing(host: String, port: Int = 8765, deviceName: String = Build.MODEL ?: "Android Phone"): PairingResponse {
+        currentHost = host
+        currentPort = port
+        _statusMessage.value = "Connecting to TV at $host:$port..."
+
+        val connected = client.connect(host, port)
+        if (!connected) {
+            _pairingStatus.value = PairingStatus.REJECTED
+            _statusMessage.value = "Could not reach TV at $host:$port. Ensure both devices are on the same Wi-Fi network."
+            return PairingResponse(status = PairingStatus.REJECTED, message = "Connection failed")
+        }
+
+        _statusMessage.value = "Awaiting TV approval..."
+        val pairResp = client.requestPairing(myDeviceId, deviceName)
+        _pairingStatus.value = pairResp.status
+
+        if (pairResp.status == PairingStatus.PENDING_APPROVAL) {
+            _statusMessage.value = "Pairing approved on TV. Please enter the 6-digit PIN shown on the TV screen."
+        } else {
+            _statusMessage.value = pairResp.message.ifBlank { "Pairing rejected by TV" }
+        }
+        return pairResp
+    }
+
+    suspend fun verifyPin(pin: String): PairingResponse {
+        _statusMessage.value = "Verifying PIN..."
+        val verifyResp = client.verifyPairing(myDeviceId, pin)
+        _pairingStatus.value = verifyResp.status
+
+        if (verifyResp.status == PairingStatus.APPROVED && verifyResp.sessionToken != null) {
+            _statusMessage.value = "Pairing successful! Connected to TV."
+            val info = PairedTvInfo(
+                host = currentHost,
+                port = currentPort,
+                tvDeviceName = verifyResp.tvDeviceName,
+                sessionToken = verifyResp.sessionToken!!,
+                deviceId = myDeviceId,
+                pairedAt = System.currentTimeMillis()
+            )
+            storage.savePairedTv(info)
+        } else if (verifyResp.status == PairingStatus.INVALID_PIN) {
+            _statusMessage.value = verifyResp.message.ifBlank { "Invalid PIN. Please check the TV screen." }
+        } else if (verifyResp.status == PairingStatus.EXPIRED) {
+            _statusMessage.value = "PIN expired. Please initiate pairing again."
+        } else {
+            _statusMessage.value = verifyResp.message.ifBlank { "Pairing failed" }
+        }
+        return verifyResp
+    }
+
+    suspend fun connectWithSaved(info: PairedTvInfo): Boolean {
+        if (!info.isPaired) return false
+        currentHost = info.host
+        currentPort = info.port
+        myDeviceId = info.deviceId
+
+        _statusMessage.value = "Reconnecting to ${info.tvDeviceName}..."
+        val connected = client.connect(info.host, info.port)
+        if (!connected) {
+            _statusMessage.value = "TV is unreachable at ${info.host}."
+            return false
+        }
+
+        val auth = client.authenticate(info.deviceId, info.sessionToken, Build.MODEL ?: "Android Phone")
+        if (auth.status == com.nexus.personalintelligence.core.remote.HandshakeStatus.SUCCESS) {
+            _statusMessage.value = "Connected to ${info.tvDeviceName}"
+            return true
+        } else {
+            _statusMessage.value = "Authentication failed: ${auth.message}"
+            return false
+        }
+    }
+
+    suspend fun sendCommand(command: RemoteCommand): CommandResult {
+        return client.sendCommand(command)
+    }
+
+    fun disconnect() {
+        client.disconnect()
+        _statusMessage.value = "Disconnected from TV"
+    }
+
+    suspend fun unpair() {
+        disconnect()
+        _pairingStatus.value = null
+        _statusMessage.value = null
+        storage.clearPairedTv()
+    }
+
+    fun clearStatusMessage() {
+        _statusMessage.value = null
+    }
+}

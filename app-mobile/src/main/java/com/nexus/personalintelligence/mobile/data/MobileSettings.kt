@@ -5,6 +5,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.nexus.personalintelligence.mobile.ai.ProviderDraft
@@ -27,15 +29,32 @@ enum class AssistantLanguage(val id: String, val label: String) {
     }
 }
 
+data class PairedTvInfo(
+    val host: String = "",
+    val port: Int = 8765,
+    val tvDeviceName: String = "",
+    val sessionToken: String = "",
+    val deviceId: String = "",
+    val pairedAt: Long = 0L
+) {
+    val isPaired: Boolean get() = sessionToken.isNotBlank() && host.isNotBlank()
+}
+
+interface PairedTvStorage {
+    suspend fun savePairedTv(info: PairedTvInfo)
+    suspend fun clearPairedTv()
+}
+
 data class MobileSettings(
     val displayName: String = "",
     val language: AssistantLanguage = AssistantLanguage.English,
     val provider: ProviderSettings = ProviderSettings(),
+    val pairedTv: PairedTvInfo = PairedTvInfo(),
 )
 
 private val Context.mobileStore: DataStore<Preferences> by preferencesDataStore(name = "nexus_mobile_settings")
 
-class MobileSettingsRepository(private val context: Context) {
+class MobileSettingsRepository(private val context: Context) : PairedTvStorage {
     private object Keys {
         val NAME = stringPreferencesKey("display_name")
         val LANGUAGE = stringPreferencesKey("language")
@@ -43,6 +62,12 @@ class MobileSettingsRepository(private val context: Context) {
         val BASE_URL = stringPreferencesKey("provider_base_url")
         val MODEL = stringPreferencesKey("provider_model")
         val KEY_CIPHER = stringPreferencesKey("provider_key_cipher")
+        val TV_HOST = stringPreferencesKey("tv_host")
+        val TV_PORT = intPreferencesKey("tv_port")
+        val TV_NAME = stringPreferencesKey("tv_name")
+        val TV_SESSION_TOKEN = stringPreferencesKey("tv_session_token")
+        val TV_DEVICE_ID = stringPreferencesKey("tv_device_id")
+        val TV_PAIRED_AT = longPreferencesKey("tv_paired_at")
     }
 
     val settings: Flow<MobileSettings> = context.mobileStore.data
@@ -58,6 +83,14 @@ class MobileSettingsRepository(private val context: Context) {
                     model = p[Keys.MODEL].orEmpty(),
                     hasApiKey = p[Keys.KEY_CIPHER] != null,
                 ),
+                pairedTv = PairedTvInfo(
+                    host = p[Keys.TV_HOST].orEmpty(),
+                    port = p[Keys.TV_PORT] ?: 8765,
+                    tvDeviceName = p[Keys.TV_NAME].orEmpty(),
+                    sessionToken = p[Keys.TV_SESSION_TOKEN].orEmpty(),
+                    deviceId = p[Keys.TV_DEVICE_ID].orEmpty(),
+                    pairedAt = p[Keys.TV_PAIRED_AT] ?: 0L
+                )
             )
         }
 
@@ -92,5 +125,27 @@ class MobileSettingsRepository(private val context: Context) {
 
     suspend fun removeApiKey() {
         context.mobileStore.edit { p -> p.remove(Keys.KEY_CIPHER) }
+    }
+
+    override suspend fun savePairedTv(info: PairedTvInfo) {
+        context.mobileStore.edit { p ->
+            p[Keys.TV_HOST] = info.host
+            p[Keys.TV_PORT] = info.port
+            p[Keys.TV_NAME] = info.tvDeviceName
+            p[Keys.TV_SESSION_TOKEN] = info.sessionToken
+            p[Keys.TV_DEVICE_ID] = info.deviceId
+            p[Keys.TV_PAIRED_AT] = info.pairedAt
+        }
+    }
+
+    override suspend fun clearPairedTv() {
+        context.mobileStore.edit { p ->
+            p.remove(Keys.TV_HOST)
+            p.remove(Keys.TV_PORT)
+            p.remove(Keys.TV_NAME)
+            p.remove(Keys.TV_SESSION_TOKEN)
+            p.remove(Keys.TV_DEVICE_ID)
+            p.remove(Keys.TV_PAIRED_AT)
+        }
     }
 }
