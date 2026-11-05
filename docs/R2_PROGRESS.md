@@ -7,10 +7,10 @@
 - **HEAD Commit**: uncommitted work after ff0507c
 - **Passing Test Counts from Fresh XML**:
   - `core:ai`: 6 tests, 0 failures
-  - `core:remote`: 13 tests, 0 failures
+  - `core:remote`: 19 tests, 0 failures
   - `app-tv`: 18 tests, 0 failures
   - `app-mobile`: 15 tests, 0 failures
-  - **Subtotal**: 52 passed, 0 failures across active R2 target modules.
+  - **Subtotal**: 58 passed, 0 failures across active R2 target modules.
 
 ---
 
@@ -52,11 +52,11 @@
 | **32** | SCHEDULED ACTIONS | **partial** | `NexusAutomationEngineTest.testAutomationApprovalAndExecution`. | Android AlarmManager scheduler implementation. |
 | **33** | CUSTOM SCREENSAVER | **partial** | `TvScreensaverTest.testDisabledScreensaverTimeout`. | Spec's 5/15/off timeout options are not tested; UI selector not built. |
 | **34** | DEVICE DASHBOARD (HARDWARE METRICS) | **done untested** | `DeviceInfo.kt` on TV and mobile dashboard tiles. | Live network ping/latency measurement. |
-| **35** | DIAGNOSTICS AND COMMAND HISTORY | **not started** | None. | Diagnostic report generator and sanitized JSON export. |
+| **35** | DIAGNOSTICS AND COMMAND HISTORY | **done and tested** | `DiagnosticsReportTest.testCommandHistoryBoundedCapacity`, `DiagnosticsReportTest.testSecretRedactionFromDiagnosticExport`. | UI diagnostic export button in Settings. |
 | **36** | ACCESSIBILITY | **done untested** | High-contrast borders, focus indicators in `TvComponents.kt`. | Reduced-motion runtime toggle in Settings. |
 | **37** | BACKUP AND RESTORE | **partial** | `NexusSettingsRepositoryTest.testSettingsAndBackupRestore`. | User-facing JSON file export/import picker in UI. |
 | **38** | MULTI-DEVICE SESSION MANAGEMENT | **done and tested** | `PairingProtocolTest.testRevokedDeviceAuthenticationAndCommandRejection`. | Multi-phone concurrent active session list in TV Settings. |
-| **39** | NOTIFICATION AND EVENT CENTRE | **not started** | None. | Persistent event/notification drawer. |
+| **39** | NOTIFICATION AND EVENT CENTRE | **done and tested** | `NexusEventStoreTest.testAddEventAndListNewestFirst`, `NexusEventStoreTest.testBoundedCapacityEviction`, `NexusEventStoreTest.testMarkAsReadAndUnreadCount`, `NexusEventStoreTest.testClearAll`. | Visual notification drawer UI. |
 | **40** | SOUND AND FEEDBACK SYSTEM | **done untested** | `TvAudioEngine.kt` in `app-tv`. | Sound assets bundled and wired to keypress events. |
 | **41** | CONNECTION RECOVERY | **done and tested** | `PairingProtocolTest.testReconnectionFlow`, `MobileRemoteManagerTest.testReconnectionUsingSavedCredentials`. | Exponential backoff retry loop on background resume. |
 | **42** | USER PROFILES | **not started** | None. | User profile switcher. |
@@ -67,8 +67,8 @@
 | **47** | LOW-MEMORY OPTIMISATION | **done untested** | Lean socket server, no local LLM on TV, memory cache bounds. | Actual physical heap measurement on 2 GB Motorola stick under load. |
 | **48** | FAILURE HANDLING | **done and tested** | `PairingProtocolTest.testRejectedPairingAtSecurityGate`, `MobileRemoteManagerTest.testInvalidPinRejection`. | Failure recovery UI on physical network loss. |
 | **49** | ANDROID APP STRUCTURE | **done untested** | TV Leanback manifest, Mobile launcher manifest, exported activities configured. | Android CTS / lint structure verification. |
-| **50** | AUTOMATED TESTING | **partial** | 52 passing unit tests across core:ai (6), core:remote (13), app-tv (18), app-mobile (15), 0 failures. | Instrumented UI and integration tests on target hardware. |
-| **51** | BUILD AND APK DELIVERY | **done untested** | Gradle debug build configurations intact. | Full build of `:app-tv:assembleDebug` and `:app-mobile:assembleDebug`. |
+| **50** | AUTOMATED TESTING | **partial** | 58 passing unit tests across core:ai (6), core:remote (19), app-tv (18), app-mobile (15), 0 failures. | Instrumented UI and integration tests on target hardware. |
+| **51** | BUILD AND APK DELIVERY | **done and tested** | `:app-tv:assembleDebug` and `:app-mobile:assembleDebug` completed successfully. Built outputs: `app-tv/build/outputs/apk/debug/app-tv-debug.apk` (11M), `app-mobile/build/outputs/apk/debug/app-mobile-debug.apk` (11M). | Physical sideloading on target hardware. |
 | **52** | PHYSICAL DEVICE VERIFICATION | **not started** | Verification instructions documented in spec. | Physical testing on Samsung Galaxy F54 and Motorola TV Stick. |
 
 ---
